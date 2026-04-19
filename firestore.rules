@@ -2,146 +2,39 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    /**
-     * CORE PHILOSOPHY
-     * This ruleset implements a robust, multi-tenant clinical management system. It prioritizes 
-     * Authorization Independence by denormalizing key IDs (patientUserId, professionalId) directly 
-     * onto records like Appointments and Invoices. This ensures rules remain performant and 
-     * atomic without requiring expensive get() lookups.
-     *
-     * DATA STRUCTURE
-     * - /users/{userId}: Primary profiles for all system actors.
-     * - /app_roles: A dedicated tree for RBAC (Role-Based Access Control) using existence checks.
-     * - /professionals, /services: Publicly browseable catalogs with restricted write access.
-     * - /appointments, /invoices: Private transactional data scoped to specific patients and providers.
-     *
-     * KEY SECURITY DECISIONS
-     * 1. Existence over Content: Roles (admin, professional) are stored in dedicated paths to 
-     *    facilitate fast existence checks within security rules.
-     * 2. Structural Segregation: Administrative controls are separated from user profiles to 
-     *    prevent privilege escalation via profile updates.
-     * 3. Prototyping Flexibility: Rules enforce WHO can access WHAT, but do not strictly 
-     *    validate the data schema (except for relational/ownership IDs).
-     */
-
-    // --- Helper Functions ---
-
-    /** Checks if the request is from an authenticated user. */
     function isSignedIn() {
       return request.auth != null;
     }
 
-    /** Verifies the user owns the document at the given userId path. */
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    /** Verifies the user owns the existing resource (for update/delete). */
-    function isExistingOwner(ownerId) {
-      return isSignedIn() && resource != null && request.auth.uid == ownerId;
-    }
-
-    /** Checks if the user is an administrator via the app_roles collection. */
     function isAdmin() {
       return isSignedIn() && exists(/databases/$(database)/documents/app_roles/admin/$(request.auth.uid));
     }
 
-    /** Checks if the user is a dental professional via the app_roles collection. */
     function isProfessional() {
       return isSignedIn() && exists(/databases/$(database)/documents/app_roles/professional/$(request.auth.uid));
     }
 
-    // --- Collection Rules ---
-
-    /**
-     * @description Rules for the primary User profile collection.
-     * @path /users/{userId}
-     * @allow (get) Any signed-in user to view profiles. (create/update) The user owning the profile.
-     * @deny (create) If request.auth.uid does not match the userId in the path.
-     * @principle Enforces self-ownership for profile management.
-     */
     match /users/{userId} {
       allow get: if isSignedIn();
-      allow list: if isAdmin();
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow update: if isOwner(userId) && request.resource.data.id == resource.data.id;
-      allow delete: if isAdmin();
+      allow list: if isAdmin() || isProfessional();
+      allow create, update: if isSignedIn() && request.auth.uid == userId;
     }
 
-    /**
-     * @description Detailed profiles for dental professionals.
-     * @path /professionals/{professionalId}
-     * @allow (get, list) Public access for patients to browse professionals. (update) The professional or an admin.
-     * @deny (update) If a user attempts to change a professional profile they do not own.
-     * @principle Enables public discovery while restricting profile management to owners and admins.
-     */
-    match /professionals/{professionalId} {
-      allow get, list: if true;
-      allow create: if isAdmin() || (isProfessional() && request.resource.data.userId == request.auth.uid);
-      allow update: if isAdmin() || (resource != null && resource.data.userId == request.auth.uid);
-      allow delete: if isAdmin();
+    match /medical_records/{recordId} {
+      allow get: if isAdmin() || isProfessional() || (isSignedIn() && resource.data.patientUserId == request.auth.uid);
+      allow list: if isAdmin() || isProfessional();
+      allow create: if isAdmin() || isProfessional();
+      allow update: if isAdmin() || (isProfessional() && resource.data.professionalId == request.auth.uid);
     }
 
-    /**
-     * @description Catalog of services offered by the clinic.
-     * @path /services/{serviceId}
-     * @allow (get, list) Public access for browsing. (write) Admin only.
-     * @deny (write) Any non-admin user attempting to modify the service catalog.
-     * @principle Restricts core business definitions to administrators.
-     */
-    match /services/{serviceId} {
-      allow get, list: if true;
-      allow create, update, delete: if isAdmin();
-    }
-
-    /**
-     * @description Management of dental appointments.
-     * @path /appointments/{appointmentId}
-     * @allow (get, list, create, update) The patient, the assigned professional, or an admin.
-     * @deny (get) A patient attempting to view someone else's appointment.
-     * @principle Uses denormalized IDs to permit access to multiple stakeholders (Patient + Professional).
-     */
-    match /appointments/{appointmentId} {
-      allow get, list: if isAdmin() || (isSignedIn() && (resource.data.patientUserId == request.auth.uid || resource.data.professionalId == request.auth.uid));
-      allow create: if isAdmin() || (isSignedIn() && request.resource.data.patientUserId == request.auth.uid);
-      allow update: if isAdmin() || (isExistingOwner(resource.data.patientUserId) || isExistingOwner(resource.data.professionalId));
-      allow delete: if isAdmin();
-    }
-
-    /**
-     * @description Billing records for rendered services.
-     * @path /invoices/{invoiceId}
-     * @allow (get, list) The patient the invoice belongs to or an admin. (write) Admin only.
-     * @deny (create) Any patient attempting to create their own invoice.
-     * @principle Ensures financial data is read-only for patients and fully manageable by admins.
-     */
-    match /invoices/{invoiceId} {
-      allow get, list: if isAdmin() || (isSignedIn() && resource.data.patientUserId == request.auth.uid);
-      allow create, update, delete: if isAdmin();
-    }
-
-    /**
-     * @description RBAC Role assignments for Administrators.
-     * @path /app_roles/admin/{adminUserId}
-     * @allow (get) Signed-in users to verify roles. (write) No one (managed via Admin SDK/Console).
-     * @deny (write) Attempting to grant oneself admin privileges.
-     * @principle Adheres to "Existence over Content" for global role verification.
-     */
-    match /app_roles/admin/{adminUserId} {
+    match /app_roles/{role}/{userId} {
       allow get: if isSignedIn();
-      allow list, create, update, delete: if false;
+      allow write: if false; // Managed via admin console or custom logic
     }
-
-    /**
-     * @description RBAC Role assignments for Professionals.
-     * @path /app_roles/professional/{professionalUserId}
-     * @allow (get) Signed-in users to verify roles. (write) Admin only.
-     * @deny (write) Any non-admin user.
-     * @principle Decouples professional status from the primary user profile for cleaner rules.
-     */
-    match /app_roles/professional/{professionalUserId} {
-      allow get: if isSignedIn();
-      allow list, create, update, delete: if isAdmin();
-    }
+    
+    // Default allow for other collections for prototyping
+    match /appointments/{id} { allow read, write: if isSignedIn(); }
+    match /services/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /professionals/{id} { allow read: if true; allow write: if isAdmin(); }
   }
 }

@@ -25,10 +25,7 @@
         },
         "role": {
           "type": "string",
-          "description": "The role of the user within the system (e.g., 'patient', 'professional', 'admin').",
-          "items": {
-            "type": "string"
-          }
+          "description": "The role of the user within the system (e.g., 'patient', 'professional', 'admin')."
         },
         "createdAt": {
           "type": "string",
@@ -50,40 +47,66 @@
         "updatedAt"
       ]
     },
+    "MedicalRecord": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "MedicalRecord",
+      "type": "object",
+      "description": "Stores clinical evolution, anamnesis, and treatment notes for a patient.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "patientUserId": {
+          "type": "string"
+        },
+        "professionalId": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string",
+          "description": "The clinical notes provided by the dentist."
+        },
+        "treatment": {
+          "type": "string",
+          "description": "The treatment performed or planned."
+        },
+        "aiSummary": {
+          "type": "string",
+          "description": "AI generated clinical summary."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "patientUserId",
+        "professionalId",
+        "notes",
+        "createdAt"
+      ]
+    },
     "Professional": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Professional",
       "type": "object",
-      "description": "Represents a dental professional (dentist) associated with the clinic, linked to a User account.",
+      "description": "Represents a dental professional (dentist) associated with the clinic.",
       "properties": {
         "id": {
-          "type": "string",
-          "description": "Unique identifier for the Professional entity."
+          "type": "string"
         },
         "userId": {
-          "type": "string",
-          "description": "Reference to the associated User account. (Relationship: User 1:1 Professional)"
+          "type": "string"
         },
         "specialty": {
-          "type": "string",
-          "description": "The dental specialty of the professional (e.g., 'General Dentistry', 'Orthodontics')."
+          "type": "string"
         },
         "registrationNumber": {
-          "type": "string",
-          "description": "The professional registration number (e.g., CRM for dentists in Brazil)."
-        },
-        "bio": {
-          "type": "string",
-          "description": "A short biographical description of the professional."
+          "type": "string"
         },
         "createdAt": {
           "type": "string",
-          "description": "Timestamp when the professional record was created.",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "description": "Timestamp when the professional record was last updated.",
           "format": "date-time"
         }
       },
@@ -92,8 +115,7 @@
         "userId",
         "specialty",
         "registrationNumber",
-        "createdAt",
-        "updatedAt"
+        "createdAt"
       ]
     },
     "Service": {
@@ -103,183 +125,55 @@
       "description": "Represents a dental service offered by the clinic.",
       "properties": {
         "id": {
-          "type": "string",
-          "description": "Unique identifier for the Service entity."
+          "type": "string"
         },
         "name": {
-          "type": "string",
-          "description": "The name of the dental service (e.g., 'Dental Cleaning', 'Consultation', 'Tooth Extraction')."
-        },
-        "description": {
-          "type": "string",
-          "description": "A detailed description of the service."
+          "type": "string"
         },
         "price": {
-          "type": "number",
-          "description": "The monetary cost of the service."
-        },
-        "durationMinutes": {
-          "type": "number",
-          "description": "The estimated duration of the service in minutes, used for scheduling."
+          "type": "number"
         },
         "isActive": {
-          "type": "boolean",
-          "description": "Indicates if the service is currently active and available for booking."
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp when the service record was created.",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "description": "Timestamp when the service record was last updated.",
-          "format": "date-time"
+          "type": "boolean"
         }
       },
       "required": [
         "id",
         "name",
-        "description",
         "price",
-        "durationMinutes",
-        "isActive",
-        "createdAt",
-        "updatedAt"
+        "isActive"
       ]
     },
     "Appointment": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Appointment",
       "type": "object",
-      "description": "Represents a scheduled dental consultation between a patient and a professional for a specific service.",
+      "description": "Represents a scheduled dental consultation.",
       "properties": {
         "id": {
-          "type": "string",
-          "description": "Unique identifier for the Appointment entity."
+          "type": "string"
         },
         "patientUserId": {
-          "type": "string",
-          "description": "Reference to the User account of the patient who booked the appointment. (Relationship: User 1:N Appointment)"
+          "type": "string"
         },
         "professionalId": {
-          "type": "string",
-          "description": "Reference to the Professional entity performing the service. (Relationship: Professional 1:N Appointment)"
-        },
-        "serviceId": {
-          "type": "string",
-          "description": "Reference to the Service entity being provided during the appointment. (Relationship: Service 1:N Appointment)"
-        },
-        "appointmentDateTime": {
-          "type": "string",
-          "description": "The date and time when the appointment is scheduled.",
-          "format": "date-time"
+          "type": "string"
         },
         "status": {
-          "type": "string",
-          "description": "The current status of the appointment (e.g., 'pending', 'confirmed', 'cancelled', 'completed').",
-          "items": {
-            "type": "string"
-          }
-        },
-        "notes": {
-          "type": "string",
-          "description": "Internal notes regarding the appointment, visible to administrators and professionals."
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp when the appointment record was created.",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "description": "Timestamp when the appointment record was last updated.",
-          "format": "date-time"
+          "type": "string"
         }
       },
       "required": [
         "id",
         "patientUserId",
         "professionalId",
-        "serviceId",
-        "appointmentDateTime",
-        "status",
-        "createdAt",
-        "updatedAt"
-      ]
-    },
-    "Invoice": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Invoice",
-      "type": "object",
-      "description": "Represents a billing record for services rendered to a patient, potentially summarizing multiple appointments.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Invoice entity."
-        },
-        "patientUserId": {
-          "type": "string",
-          "description": "Reference to the User account of the patient for whom the invoice is generated. (Relationship: User 1:N Invoice)"
-        },
-        "appointmentIds": {
-          "type": "array",
-          "description": "An array of references to appointments included in this invoice. (Relationship: Appointment N:N Invoice)",
-          "items": {
-            "type": "string"
-          }
-        },
-        "issueDate": {
-          "type": "string",
-          "description": "The date when the invoice was issued.",
-          "format": "date-time"
-        },
-        "dueDate": {
-          "type": "string",
-          "description": "The date by which the invoice is expected to be paid.",
-          "format": "date-time"
-        },
-        "totalAmount": {
-          "type": "number",
-          "description": "The total amount due for this invoice."
-        },
-        "status": {
-          "type": "string",
-          "description": "The current payment status of the invoice (e.g., 'pending', 'paid', 'overdue', 'cancelled', 'refunded').",
-          "items": {
-            "type": "string"
-          }
-        },
-        "description": {
-          "type": "string",
-          "description": "A summary or detailed description of the invoice, potentially AI-generated."
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp when the invoice record was created.",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "description": "Timestamp when the invoice record was last updated.",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "patientUserId",
-        "issueDate",
-        "totalAmount",
-        "status",
-        "createdAt",
-        "updatedAt"
+        "status"
       ]
     }
   },
   "auth": {
     "providers": [
-      "password",
-      "anonymous"
+      "google"
     ]
   },
   "firestore": {
@@ -291,112 +185,39 @@
           "schema": {
             "$ref": "#/backend/entities/User"
           },
-          "description": "Stores user profiles (patients, professionals, admins). A user can manage their own profile. Includes a 'role' field for informational purposes, but specific access control roles (admin, professional) are primarily managed via dedicated '/app_roles' collections for robust security rule efficiency.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user, matching 'request.auth.uid'."
-            }
-          ]
+          "description": "User profiles."
         }
       },
       {
-        "path": "/professionals/{professionalId}",
+        "path": "/medical_records/{recordId}",
         "definition": {
-          "entityName": "Professional",
+          "entityName": "MedicalRecord",
           "schema": {
-            "$ref": "#/backend/entities/Professional"
+            "$ref": "#/backend/entities/MedicalRecord"
           },
-          "description": "Detailed profiles for dental professionals. Each document includes a 'userId' field for linking to the primary User account. Patients can list available professionals for booking. Individual professionals can read and update their own profile. Administrators have full management control over all professional profiles.",
-          "params": [
-            {
-              "name": "professionalId",
-              "description": "The unique identifier for a professional."
-            }
-          ]
+          "description": "Patient clinical history. Accessible by the patient and authorized professionals/admins."
         }
       },
       {
-        "path": "/services/{serviceId}",
-        "definition": {
-          "entityName": "Service",
-          "schema": {
-            "$ref": "#/backend/entities/Service"
-          },
-          "description": "Catalog of dental services offered by the clinic. This collection is publicly readable for all users to browse and select services for booking. Only administrators are authorized to create, update, or delete service definitions.",
-          "params": [
-            {
-              "name": "serviceId",
-              "description": "The unique identifier for a dental service."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/appointments/{appointmentId}",
-        "definition": {
-          "entityName": "Appointment",
-          "schema": {
-            "$ref": "#/backend/entities/Appointment"
-          },
-          "description": "Records of all scheduled dental appointments. Includes denormalized 'patientUserId' and 'professionalId' for authorization independence, allowing patients to view/manage their own appointments, professionals to view/manage their assigned appointments, and administrators to oversee all appointments without relying on 'get()' calls in security rules.",
-          "params": [
-            {
-              "name": "appointmentId",
-              "description": "The unique identifier for an appointment."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/invoices/{invoiceId}",
-        "definition": {
-          "entityName": "Invoice",
-          "schema": {
-            "$ref": "#/backend/entities/Invoice"
-          },
-          "description": "Billing records for services rendered. Includes denormalized 'patientUserId' for authorization independence. Patients can view their own invoices, and administrators have full management access to all invoices.",
-          "params": [
-            {
-              "name": "invoiceId",
-              "description": "The unique identifier for an invoice."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/app_roles/admin/{adminUserId}",
+        "path": "/app_roles/admin/{userId}",
         "definition": {
           "entityName": "User",
           "schema": {
             "$ref": "#/backend/entities/User"
           },
-          "description": "Dedicated collection for assigning 'admin' roles. The existence of a document at this path signifies that the corresponding 'adminUserId' has administrative privileges, adhering to the 'Existence over Content' principle for global roles.",
-          "params": [
-            {
-              "name": "adminUserId",
-              "description": "The unique identifier of the user who has administrative privileges, matching 'request.auth.uid'."
-            }
-          ]
+          "description": "Admin role indicator."
         }
       },
       {
-        "path": "/app_roles/professional/{professionalUserId}",
+        "path": "/app_roles/professional/{userId}",
         "definition": {
           "entityName": "User",
           "schema": {
             "$ref": "#/backend/entities/User"
           },
-          "description": "Dedicated collection for assigning 'professional' roles. The existence of a document at this path signifies that the corresponding 'professionalUserId' has professional-specific privileges, such as managing their assigned appointments. This ensures authorization independence for professional-related rules.",
-          "params": [
-            {
-              "name": "professionalUserId",
-              "description": "The unique identifier of the user who has professional privileges, matching 'request.auth.uid'."
-            }
-          ]
+          "description": "Professional role indicator."
         }
       }
-    ],
-    "reasoning": "The proposed Firestore structure prioritizes secure, scalable, and debuggable authorization by strictly adhering to the core design principles. \n\n**Authorization Independence via Denormalization:**\n*   **Appointments (`/appointments/{appointmentId}`):** To eliminate hierarchical authorization dependencies and avoid `get()` calls in security rules, each `Appointment` document explicitly includes the `patientUserId` and `professionalId`. This denormalization allows security rules to directly check `request.auth.uid == resource.data.patientUserId` or `request.auth.uid == resource.data.professionalId` without needing to fetch data from parent user or professional documents. This is critical for maintaining atomicity in operations (e.g., creating an appointment) and simplifies rule debugging.\n*   **Invoices (`/invoices/{invoiceId}`):** Similarly, `Invoice` documents include the `patientUserId`. This enables direct ownership checks (`request.auth.uid == resource.data.patientUserId`) for patient access to their billing records, again avoiding costly and complex `get()` operations in rules.\n*   **Professionals (`/professionals/{professionalId}`):** Each `Professional` document contains `userId`, linking it directly to the primary `User` record. This allows a professional to directly verify ownership of their profile via `resource.data.userId == request.auth.uid`.\n*   **Roles (`/app_roles/admin/{adminUserId}`, `/app_roles/professional/{professionalUserId}`):** Dedicated top-level collections are used for global role assignments (admin, professional). The *existence* of a document at `/app_roles/{role}/{userId}` serves as a direct, independent check for a user's role without requiring `get()` calls to user profiles when authorizing actions in other collections. This strongly adheres to the 'Existence over Content' principle for DBAC.\n\n**Support for Query Against Paths (QAPs - Rules are not Filters):**\n*   **Structural Segregation:** Collections are designed with homogenous security postures. For example, `/services` is mostly public-read, admin-write. `/users` is self-owned. This naturally limits the need for complex filtering in rules.\n*   **Denormalization for Targeted Queries:** By denormalizing `patientUserId` and `professionalId` into `Appointment` documents, clients (patients or professionals) can perform efficient, secure `list` queries. Patients can query `appointments.where('patientUserId', '==', request.auth.uid)`, and professionals can query `appointments.where('professionalId', '==', request.auth.uid)`. These queries are inherently secure because the `patientUserId` or `professionalId` field is indexed and directly verifiable against `request.auth.uid` within the rule. This prevents data leakage and ensures that users only retrieve documents they are authorized to see, without the security rules acting as filters that hide unauthorized data after a broader query.\n*   **Admin Access:** Administrators, identified by their presence in `/app_roles/admin/{adminUserId}`, are granted broad `list` access across all collections (appointments, invoices, professionals, services), which aligns with their role and does not violate QAPs as their permission is global.\n\nOverall, this structure provides a clear separation of concerns, simplifies security rule logic by moving authorization context into the documents themselves or dedicated role collections, and enables efficient querying patterns while ensuring data integrity and security."
+    ]
   }
 }
