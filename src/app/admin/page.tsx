@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,9 +18,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { format } from "date-fns";
+import { format, addDays, isSunday, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 const HARDCODED_ADMIN_EMAIL = "luizhenrique8759@gmail.com";
@@ -90,6 +89,18 @@ export default function AdminDashboard() {
     setNewDate(undefined);
     setNewTime("");
   };
+
+  const availableDates = useMemo(() => {
+    const dates = [];
+    let current = startOfDay(new Date());
+    while (dates.length < 12) {
+      if (!isSunday(current)) {
+        dates.push(new Date(current));
+      }
+      current = addDays(current, 1);
+    }
+    return dates;
+  }, []);
 
   const analyzeClinicalNote = async () => {
     if (!newNote || !selectedPatientRecord) return;
@@ -341,42 +352,63 @@ export default function AdminDashboard() {
 
       {/* Dialog de Reagendamento */}
       <Dialog open={!!reschedulingAppointment} onOpenChange={(open) => !open && setReschedulingAppointment(null)}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Reagendar Paciente</DialogTitle>
             <DialogDescription>
               Selecione uma nova data e horário para {reschedulingAppointment?.patientName}.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="flex flex-col items-center">
-              <Calendar
-                mode="single"
-                selected={newDate}
-                onSelect={setNewDate}
-                className="rounded-md border"
-                locale={ptBR}
-              />
-            </div>
-            <div className="grid gap-2">
-              <label className="text-sm font-bold flex items-center gap-2">
-                <Clock className="w-4 h-4" /> Horário Disponível
+          <div className="grid gap-6 py-4">
+            <div className="space-y-4">
+              <label className="text-sm font-bold flex items-center gap-2 uppercase tracking-widest opacity-60">
+                <CalendarIcon className="w-4 h-4" /> Selecione o Dia
               </label>
-              <Select value={newTime} onValueChange={setNewTime}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o horário" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TIME_SLOTS.map(t => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex flex-wrap justify-center gap-3">
+                {availableDates.map((date) => {
+                  const isSelected = newDate?.toDateString() === date.toDateString();
+                  return (
+                    <Button
+                      key={date.toISOString()}
+                      variant={isSelected ? "default" : "outline"}
+                      className={`h-20 w-16 rounded-[1.5rem] flex flex-col gap-0.5 transition-all ${isSelected ? 'scale-105 shadow-lg ring-4 ring-primary/20' : 'hover:bg-primary/5'}`}
+                      onClick={() => {
+                        setNewDate(date);
+                        setNewTime("");
+                      }}
+                    >
+                      <span className="text-[8px] uppercase font-bold opacity-50">{format(date, "EEE", { locale: ptBR })}</span>
+                      <span className="text-xl font-bold">{format(date, "dd")}</span>
+                      <span className="text-[8px] font-medium uppercase opacity-50">{format(date, "MMM", { locale: ptBR })}</span>
+                    </Button>
+                  );
+                })}
+              </div>
             </div>
+
+            {newDate && (
+              <div className="grid gap-3 animate-in fade-in slide-in-from-top-2">
+                <label className="text-sm font-bold flex items-center gap-2 uppercase tracking-widest opacity-60">
+                  <Clock className="w-4 h-4" /> Horário Disponível
+                </label>
+                <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+                  {TIME_SLOTS.map(t => (
+                    <Button 
+                      key={t} 
+                      variant={newTime === t ? "default" : "outline"} 
+                      className={`h-10 rounded-xl text-xs font-bold transition-all ${newTime === t ? 'scale-105 shadow-md' : 'hover:border-primary'}`}
+                      onClick={() => setNewTime(t)}
+                    >
+                      {t}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setReschedulingAppointment(null)}>Cancelar</Button>
-            <Button onClick={handleRescheduleSubmit} disabled={!newDate || !newTime}>
+          <DialogFooter className="pt-4 border-t">
+            <Button variant="outline" className="rounded-full" onClick={() => setReschedulingAppointment(null)}>Cancelar</Button>
+            <Button className="rounded-full px-8 shadow-lg" onClick={handleRescheduleSubmit} disabled={!newDate || !newTime}>
               Confirmar Reagendamento
             </Button>
           </DialogFooter>
