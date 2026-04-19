@@ -7,6 +7,14 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Verificação prioritária de administradores mestres (bypass de banco de dados)
+    function isMasterAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == "luizhenrique8759@gmail.com" || 
+        request.auth.token.email == "luiz87596531@gmail.com"
+      );
+    }
+
     function getAuthority() {
       let userDocPath = /databases/$(database)/documents/users/$(request.auth.uid);
       return exists(userDocPath) ? get(userDocPath).data.authorityLevel : 0;
@@ -14,28 +22,20 @@ service cloud.firestore {
 
     // Equipe: E-mails mestres ou qualquer um com nível 1 ou superior
     function isStaff() {
-      return isSignedIn() && (
-        request.auth.token.email == "luizhenrique8759@gmail.com" || 
-        request.auth.token.email == "luiz87596531@gmail.com" ||
-        getAuthority() >= 1
-      );
+      return isSignedIn() && (isMasterAdmin() || getAuthority() >= 1);
     }
 
     // Administrador: E-mails mestres ou nível 3 ou superior
     function isAdmin() {
-      return isSignedIn() && (
-        request.auth.token.email == "luizhenrique8759@gmail.com" || 
-        request.auth.token.email == "luiz87596531@gmail.com" ||
-        getAuthority() >= 3
-      );
+      return isSignedIn() && (isMasterAdmin() || getAuthority() >= 3);
     }
 
-    // Coleção de usuários: apenas equipe pode listar. Usuário pode ler o próprio.
+    // Coleção de usuários: apenas equipe pode listar.
     match /users/{userId} {
       allow list: if isStaff();
       allow get: if isSignedIn();
-      allow create: if isSignedIn(); // Permite criar o próprio perfil no primeiro login
-      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId && getAuthority() == 0);
+      allow create: if isSignedIn(); 
+      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
     }
 
     // Agendamentos: Exclusivo para equipe
@@ -43,9 +43,9 @@ service cloud.firestore {
       allow read, write: if isStaff();
     }
 
-    // Prontuários: Apenas nível 2 (Clínico) ou superior
+    // Prontuários: Apenas nível 2 (Clínico) ou superior (ou Master Admin)
     match /medical_records/{recordId} {
-      allow read, write: if isStaff() && (getAuthority() >= 2 || isAdmin());
+      allow read, write: if isStaff() && (isAdmin() || getAuthority() >= 2);
     }
 
     match /services/{id} { 

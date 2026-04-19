@@ -61,12 +61,17 @@ export default function AdminDashboard() {
   
   const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
-  const authorityLevel = userData?.authorityLevel || 0;
+  // Nível mestre por e-mail caso o documento ainda não tenha carregado
+  const masterEmails = ["luizhenrique8759@gmail.com", "luiz87596531@gmail.com"];
+  const isMaster = user?.email && masterEmails.includes(user.email);
+  const authorityLevel = userData?.authorityLevel ?? (isMaster ? 3 : 0);
 
   const isAuthorized = useMemo(() => {
-    if (isUserLoading || isLoadingUserData) return false;
+    if (isUserLoading) return false;
+    if (isMaster) return true;
+    if (isLoadingUserData) return false;
     return authorityLevel >= 1;
-  }, [isUserLoading, isLoadingUserData, authorityLevel]);
+  }, [isUserLoading, isLoadingUserData, authorityLevel, isMaster]);
 
   const usersRef = useMemoFirebase(() => {
     if (!db || !isAuthorized) return null;
@@ -99,8 +104,13 @@ export default function AdminDashboard() {
   }, [patients, selectedPatientId]);
 
   const recordsQuery = useMemoFirebase(() => {
+    // Só dispara se tivermos autoridade clínica confirmada
     if (!db || !selectedPatientId || authorityLevel < 2) return null;
-    return query(collection(db, 'medical_records'), where('patientUserId', '==', selectedPatientId), orderBy('createdAt', 'desc'));
+    return query(
+      collection(db, 'medical_records'), 
+      where('patientUserId', '==', selectedPatientId), 
+      orderBy('createdAt', 'desc')
+    );
   }, [db, selectedPatientId, authorityLevel]);
 
   const { data: medicalRecords, isLoading: isLoadingRecords } = useCollection(recordsQuery);
@@ -214,7 +224,7 @@ export default function AdminDashboard() {
     }
   };
 
-  if (isUserLoading || isLoadingUserData) {
+  if (isUserLoading || (isLoadingUserData && !isMaster)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
