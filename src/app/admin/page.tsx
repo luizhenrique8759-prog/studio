@@ -6,9 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MOCK_APPOINTMENTS, SERVICES, PROFESSIONALS, Appointment } from "@/lib/mock-data";
+import { MOCK_APPOINTMENTS, SERVICES, Appointment } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, Sparkles, MessageSquare, CheckCircle2 } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, Sparkles } from "lucide-react";
 import { generateClinicalSummary } from "@/ai/flows/generate-clinical-summary";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser } from '@/firebase';
@@ -27,10 +27,10 @@ export default function AdminDashboard() {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
   
-  const [appointments, setAppointments] = useState<Appointment[]>(MOCK_APPOINTMENTS);
+  const [appointments] = useState<Appointment[]>(MOCK_APPOINTMENTS);
   const [loading, setLoading] = useState<string | null>(null);
   const [searchPatient, setSearchPatient] = useState("");
-  const [selectedPatientRecord, setSelectedPatientRecord] = useState<any>(null);
+  const [selectedPatientRecord, setSelectedPatientRecord] = useState<{id: string, name: string} | null>(null);
   const [newNote, setNewNote] = useState("");
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
 
@@ -51,19 +51,6 @@ export default function AdminDashboard() {
     } catch (error) {
       toast({ variant: "destructive", title: "Erro ao sair" });
     }
-  };
-
-  const confirmAppointment = (apt: Appointment) => {
-    setLoading(apt.id);
-    // Confirmação pessoal/manual sem IA
-    setTimeout(() => {
-      setAppointments(prev => prev.map(a => a.id === apt.id ? { ...a, status: 'confirmed' } : a));
-      toast({ 
-        title: "Agendamento Confirmado", 
-        description: `O paciente ${apt.patientName} foi confirmado com sucesso.` 
-      });
-      setLoading(null);
-    }, 800);
   };
 
   const analyzeClinicalNote = async () => {
@@ -155,9 +142,9 @@ export default function AdminDashboard() {
                   <TableRow>
                     <TableHead>Paciente</TableHead>
                     <TableHead>Serviço</TableHead>
+                    <TableHead>Data</TableHead>
                     <TableHead>Horário</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -165,21 +152,12 @@ export default function AdminDashboard() {
                     <TableRow key={apt.id}>
                       <TableCell className="font-bold">{apt.patientName}</TableCell>
                       <TableCell>{SERVICES.find(s => s.id === apt.serviceId)?.name}</TableCell>
+                      <TableCell>{apt.date}</TableCell>
                       <TableCell>{apt.time}</TableCell>
                       <TableCell>
                         <Badge variant={apt.status === 'confirmed' ? 'secondary' : 'outline'}>
                           {apt.status === 'confirmed' ? 'Confirmado' : 'Pendente'}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="text-right space-x-2">
-                        {apt.status === 'pending' && (
-                          <Button size="sm" onClick={() => confirmAppointment(apt)} disabled={loading === apt.id}>
-                            {loading === apt.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirmar"}
-                          </Button>
-                        )}
-                        <Button variant="ghost" size="sm" onClick={() => setSelectedPatientRecord({ id: apt.patientId, name: apt.patientName })}>
-                          Ver Ficha
-                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
