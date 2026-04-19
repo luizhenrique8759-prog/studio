@@ -3,7 +3,7 @@
 
 import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Stethoscope, Loader2, Shield } from "lucide-react";
 import Link from 'next/link';
 import { useAuth, useFirestore } from '@/firebase';
@@ -19,6 +19,8 @@ export default function AuthPage() {
   const { toast } = useToast();
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
+  const ADMIN_EMAIL = "luizhenrique8759@gmail.com";
+
   const handleGoogleSignIn = async () => {
     if (!auth || !db) return;
     setIsLoggingIn(true);
@@ -31,32 +33,42 @@ export default function AuthPage() {
       const userRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userRef);
       
+      const isOwner = user.email === ADMIN_EMAIL;
+      
       if (!userSnap.exists()) {
         const newUserData = {
           id: user.uid,
           name: user.displayName || 'Usuário',
           email: user.email,
-          role: 'patient',
-          authorityLevel: 0,
+          role: isOwner ? 'admin' : 'patient',
+          authorityLevel: isOwner ? 4 : 0,
           photoURL: user.photoURL,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
         await setDoc(userRef, newUserData);
         toast({ title: "Bem-vindo!", description: "Sua conta foi criada com sucesso." });
-        router.push('/dashboard');
+        router.push(isOwner ? '/admin' : '/dashboard');
       } else {
         const existingData = userSnap.data();
-        await updateDoc(userRef, {
+        
+        // Garante que o dono sempre tenha o nível correto ao logar
+        const updatePayload: any = {
           name: user.displayName || existingData.name,
           photoURL: user.photoURL || existingData.photoURL,
           updatedAt: new Date().toISOString(),
-        });
+        };
+
+        if (isOwner && existingData.authorityLevel !== 4) {
+          updatePayload.authorityLevel = 4;
+          updatePayload.role = 'admin';
+        }
+
+        await updateDoc(userRef, updatePayload);
         
         toast({ title: "Login realizado", description: `Bem-vindo de volta, ${user.displayName}!` });
         
-        // Redirecionamento baseado no nível de autoridade real do banco
-        if (existingData.authorityLevel >= 1) {
+        if (isOwner || existingData.authorityLevel >= 1) {
           router.push('/admin');
         } else {
           router.push('/dashboard');
