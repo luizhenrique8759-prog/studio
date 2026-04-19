@@ -6,9 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MOCK_APPOINTMENTS, SERVICES, Appointment, TIME_SLOTS } from "@/lib/mock-data";
+import { SERVICES, Appointment, TIME_SLOTS } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, CheckCircle2, Calendar as CalendarIcon, Clock, Users, DollarSign, Shield, Stethoscope, Star, Activity } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, CheckCircle2, Calendar as CalendarIcon, Clock, Users, DollarSign, Shield, Stethoscope, Activity } from "lucide-react";
 import { generateClinicalSummary } from "@/ai/flows/generate-clinical-summary";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { collection, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc, updateDoc, query, orderBy } from 'firebase/firestore';
 import { format, addDays, isSunday, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -32,28 +32,34 @@ export default function AdminDashboard() {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
 
+  // Dados do usuário atual
   const userDocRef = useMemoFirebase(() => {
     if (!user || !db) return null;
     return doc(db, 'users', user.uid);
   }, [db, user]);
-
   const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
+  // Listagem de todos os usuários
   const usersRef = useMemoFirebase(() => {
     if (!user || !db) return null;
     return collection(db, 'users');
   }, [db, user]);
-
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
 
-  const [appointments, setAppointments] = useState<Appointment[]>(MOCK_APPOINTMENTS);
+  // Listagem de agendamentos em tempo real
+  const apptsQuery = useMemoFirebase(() => {
+    if (!db || !user) return null;
+    return query(collection(db, 'appointments'), orderBy('date', 'asc'), orderBy('time', 'asc'));
+  }, [db, user]);
+  const { data: appointments, isLoading: isLoadingAppts } = useCollection(apptsQuery);
+
   const [loading, setLoading] = useState<string | null>(null);
   const [searchPatient, setSearchPatient] = useState("");
   const [selectedPatientRecord, setSelectedPatientRecord] = useState<{id: string, name: string} | null>(null);
   const [newNote, setNewNote] = useState("");
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
 
-  const [reschedulingAppointment, setReschedulingAppointment] = useState<Appointment | null>(null);
+  const [reschedulingAppointment, setReschedulingAppointment] = useState<any>(null);
   const [newDate, setNewDate] = useState<Date | undefined>(undefined);
   const [newTime, setNewTime] = useState<string>("");
 
@@ -67,9 +73,6 @@ export default function AdminDashboard() {
   const authorityLevel = userData?.authorityLevel || 0;
   const isProfessional = userData?.role === 'professional' || isAdmin;
 
-  // Nível 1: Recepção (Agenda)
-  // Nível 2: Clínico (Agenda + Prontuários)
-  // Nível 3: Administrativo (Agenda + Prontuários + Equipe + Financeiro)
   const canViewRecords = isAdmin || authorityLevel >= 2;
   const canViewManagement = isAdmin || authorityLevel >= 3;
   const canViewFinance = isAdmin || authorityLevel >= 3;
@@ -79,7 +82,7 @@ export default function AdminDashboard() {
     if (!auth) return;
     try {
       await signOut(auth);
-      toast({ title: "Sessão encerrada", description: "Até logo!" });
+      toast({ title: "Sessão encerrada" });
       router.push('/');
     } catch (error) {
       toast({ variant: "destructive", title: "Erro ao sair" });
@@ -88,7 +91,6 @@ export default function AdminDashboard() {
 
   const handleToggleProfessional = async (targetUser: any, level: string) => {
     if (!db || !isAdmin) return;
-    const isProf = targetUser.role === 'professional';
     const newRole = level === "0" ? 'patient' : 'professional';
     const newLevel = parseInt(level);
     
@@ -106,23 +108,24 @@ export default function AdminDashboard() {
         await deleteDoc(roleRef);
       }
 
-      toast({
-        title: "Autoridade Atualizada",
-        description: `${targetUser.name} agora possui Nível ${newLevel}.`
-      });
+      toast({ title: "Autoridade Atualizada", description: `${targetUser.name} agora possui Nível ${newLevel}.` });
     } catch (error) {
-      toast({ variant: "destructive", title: "Erro ao atualizar", description: "Verifique suas permissões." });
+      toast({ variant: "destructive", title: "Erro ao atualizar" });
     }
   };
 
-  const handleConfirmAppointment = (id: string) => {
-    setAppointments(prev => prev.map(apt => 
-      apt.id === id ? { ...apt, status: 'confirmed' as const } : apt
-    ));
-    toast({ title: "Agendamento Confirmado" });
+  const handleConfirmAppointment = async (id: string) => {
+    if (!db) return;
+    try {
+      await updateDoc(doc(db, 'appointments', id), { status: 'confirmed' });
+      toast({ title: "Agendamento Confirmado" });
+    } catch (error) {
+      toast({ variant: "destructive", title: "Erro ao confirmar" });
+    }
   };
 
   const totalBilling = useMemo(() => {
+    if (!appointments) return 0;
     return appointments.reduce((acc, apt) => {
       const service = SERVICES.find(s => s.id === apt.serviceId);
       return acc + (service?.price || 0);
@@ -203,47 +206,52 @@ export default function AdminDashboard() {
           <Card className="border-none shadow-2xl bg-card rounded-[2rem] overflow-hidden">
             <CardHeader className="bg-muted/20 border-b"><CardTitle>Próximos Atendimentos</CardTitle></CardHeader>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader className="bg-muted/10">
-                  <TableRow>
-                    <TableHead className="pl-8">Paciente</TableHead>
-                    <TableHead>Serviço</TableHead>
-                    <TableHead>Horário</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right pr-8">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {appointments.map((apt) => (
-                    <TableRow key={apt.id} className="hover:bg-muted/5 transition-colors">
-                      <TableCell className="font-bold pl-8 text-lg">{apt.patientName}</TableCell>
-                      <TableCell>{SERVICES.find(s => s.id === apt.serviceId)?.name}</TableCell>
-                      <TableCell className="font-medium text-primary">{apt.time}</TableCell>
-                      <TableCell>
-                        <Badge variant={apt.status === 'confirmed' ? 'secondary' : 'outline'} className="rounded-full px-4 py-1 text-[10px] uppercase font-bold tracking-wider">
-                          {apt.status === 'confirmed' ? '✓ Confirmado' : '⏳ Pendente'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right pr-8">
-                        <div className="flex justify-end gap-2">
-                          {apt.status === 'pending' && (
-                            <Button size="sm" variant="ghost" className="text-accent hover:bg-accent/10 rounded-full" onClick={() => handleConfirmAppointment(apt.id)}>
-                              <CheckCircle2 className="h-5 w-5" /> <span className="ml-2 hidden sm:inline">Confirmar</span>
-                            </Button>
-                          )}
-                          <Button size="sm" variant="ghost" className="rounded-full hover:bg-primary/10" onClick={() => {
-                            setReschedulingAppointment(apt);
-                            setNewDate(new Date(apt.date));
-                            setNewTime(apt.time);
-                          }}>
-                            <CalendarIcon className="h-5 w-5 text-primary" /> <span className="ml-2 hidden sm:inline text-primary">Reagendar</span>
-                          </Button>
-                        </div>
-                      </TableCell>
+              {isLoadingAppts ? (
+                <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary" /></div>
+              ) : (
+                <Table>
+                  <TableHeader className="bg-muted/10">
+                    <TableRow>
+                      <TableHead className="pl-8">Paciente</TableHead>
+                      <TableHead>Serviço</TableHead>
+                      <TableHead>Horário</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right pr-8">Ações</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {appointments?.map((apt) => (
+                      <TableRow key={apt.id} className="hover:bg-muted/5 transition-colors">
+                        <TableCell className="font-bold pl-8 text-lg">{apt.patientName}</TableCell>
+                        <TableCell>{apt.serviceName || SERVICES.find(s => s.id === apt.serviceId)?.name}</TableCell>
+                        <TableCell className="font-medium text-primary">{apt.time}</TableCell>
+                        <TableCell>
+                          <Badge variant={apt.status === 'confirmed' ? 'secondary' : 'outline'} className="rounded-full px-4 py-1 text-[10px] uppercase font-bold tracking-wider">
+                            {apt.status === 'confirmed' ? '✓ Confirmado' : '⏳ Pendente'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right pr-8">
+                          <div className="flex justify-end gap-2">
+                            {apt.status === 'pending' && (
+                              <Button size="sm" variant="ghost" className="text-accent hover:bg-accent/10 rounded-full" onClick={() => handleConfirmAppointment(apt.id)}>
+                                <CheckCircle2 className="h-5 w-5" /> <span className="ml-2 hidden sm:inline">Confirmar</span>
+                              </Button>
+                            )}
+                            <Button size="sm" variant="ghost" className="rounded-full hover:bg-primary/10" onClick={() => {
+                              setReschedulingAppointment(apt);
+                              setNewDate(new Date(apt.date));
+                              setNewTime(apt.time);
+                            }}>
+                              <CalendarIcon className="h-5 w-5 text-primary" /> <span className="ml-2 hidden sm:inline text-primary">Reagendar</span>
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {appointments?.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">Nenhum agendamento encontrado.</TableCell></TableRow>}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -344,7 +352,7 @@ export default function AdminDashboard() {
                   </div>
                   <div className="p-8 bg-muted rounded-[2rem] border flex flex-col items-center text-center">
                     <p className="text-xs uppercase font-black text-muted-foreground tracking-widest mb-2">Volume de Pacientes</p>
-                    <p className="text-5xl font-black">{appointments.length}</p>
+                    <p className="text-5xl font-black">{appointments?.length || 0}</p>
                   </div>
                   <div className="p-8 bg-accent/10 rounded-[2rem] border-2 border-accent/20 flex flex-col items-center text-center">
                     <p className="text-xs uppercase font-black text-accent/60 tracking-widest mb-2">Insumos & Gastos</p>
@@ -365,13 +373,13 @@ export default function AdminDashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {appointments.map((apt) => {
+                      {appointments?.map((apt) => {
                         const service = SERVICES.find(s => s.id === apt.serviceId);
                         return (
                           <TableRow key={apt.id}>
                             <TableCell className="text-xs pl-6">{format(new Date(apt.date), "dd/MM/yyyy")}</TableCell>
                             <TableCell className="font-bold">{apt.patientName}</TableCell>
-                            <TableCell className="text-xs italic">{service?.name}</TableCell>
+                            <TableCell className="text-xs italic">{apt.serviceName || service?.name}</TableCell>
                             <TableCell className="text-right font-bold pr-6 text-primary">R$ {service?.price.toFixed(2)}</TableCell>
                           </TableRow>
                         );
@@ -518,9 +526,16 @@ export default function AdminDashboard() {
             )}
           </div>
           <DialogFooter>
-            <Button className="rounded-full w-full h-14 text-lg font-bold shadow-xl" disabled={!newDate || !newTime} onClick={() => {
-              toast({ title: "Agenda Atualizada!", description: "O paciente será notificado da mudança." });
-              setReschedulingAppointment(null);
+            <Button className="rounded-full w-full h-14 text-lg font-bold shadow-xl" disabled={!newDate || !newTime} onClick={async () => {
+              if (db && reschedulingAppointment && newDate && newTime) {
+                await updateDoc(doc(db, 'appointments', reschedulingAppointment.id), {
+                  date: format(newDate, 'yyyy-MM-dd'),
+                  time: newTime,
+                  status: 'pending'
+                });
+                toast({ title: "Agenda Atualizada!", description: "O paciente será notificado da mudança." });
+                setReschedulingAppointment(null);
+              }
             }}>Confirmar Alteração</Button>
           </DialogFooter>
         </DialogContent>

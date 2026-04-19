@@ -28,13 +28,12 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get: if isSignedIn();
-      allow list: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 3);
+      allow list: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 1);
       allow create, update: if isSignedIn() && request.auth.uid == userId;
       allow update: if isAdmin();
     }
 
     match /medical_records/{recordId} {
-      // Nível 2 (Clínico) e superior podem ver e criar prontuários
       allow get, list, create: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 2);
       allow update: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 2);
     }
@@ -45,8 +44,13 @@ service cloud.firestore {
     }
     
     match /appointments/{id} { 
-      // Nível 1 (Recepção) e superior podem ler e gerenciar a agenda
-      allow read, write: if isSignedIn() && (isProfessional() && getAuthorityLevel() >= 1 || isAdmin()); 
+      allow read: if isSignedIn() && (
+        isAdmin() || 
+        (isProfessional() && getAuthorityLevel() >= 1) || 
+        request.auth.uid == resource.data.patientId
+      );
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (isAdmin() || (isProfessional() && getAuthorityLevel() >= 1));
     }
     
     match /services/{id} { allow read: if true; allow write: if isAdmin(); }

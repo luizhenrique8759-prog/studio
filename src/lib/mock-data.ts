@@ -1,3 +1,4 @@
+
 export type Service = {
   id: string;
   name: string;
@@ -10,7 +11,7 @@ export type Professional = {
   id: string;
   name: string;
   specialty: string;
-  imageUrl: string;
+  imageUrl?: string;
 };
 
 export type Appointment = {
@@ -22,6 +23,7 @@ export type Appointment = {
   date: string;
   time: string;
   status: 'pending' | 'confirmed' | 'cancelled';
+  createdAt: string;
 };
 
 export const SERVICES: Service[] = [
@@ -32,36 +34,10 @@ export const SERVICES: Service[] = [
   { id: '5', name: 'Extração', description: 'Remoção cirúrgica de elemento dentário.', price: 200, duration: 45 },
 ];
 
-export const PROFESSIONALS: Professional[] = [
-  { id: 'd1', name: 'Dra. Ana Silva', specialty: 'Clínica Geral', imageUrl: 'https://picsum.photos/seed/dentist2/150/150' },
-  { id: 'd2', name: 'Dr. Roberto Santos', specialty: 'Ortodontia', imageUrl: 'https://picsum.photos/seed/dentist3/150/150' },
-  { id: 'd3', name: 'Dra. Julia Costa', specialty: 'Endodontia', imageUrl: 'https://picsum.photos/seed/dentist4/150/150' },
-];
-
 export const TIME_SLOTS = [
   '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
   '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'
 ];
 
-export const MOCK_APPOINTMENTS: Appointment[] = [
-  {
-    id: 'a1',
-    patientName: 'João Oliveira',
-    patientId: 'u1',
-    professionalId: 'd1',
-    serviceId: '1',
-    date: '2024-12-25',
-    time: '09:00',
-    status: 'confirmed'
-  },
-  {
-    id: 'a2',
-    patientName: 'Maria Souza',
-    patientId: 'u2',
-    professionalId: 'd2',
-    serviceId: '2',
-    date: '2024-12-25',
-    time: '10:30',
-    status: 'pending'
-  }
-];
+export const PROFESSIONALS: Professional[] = [];
+export const MOCK_APPOINTMENTS: Appointment[] = [];

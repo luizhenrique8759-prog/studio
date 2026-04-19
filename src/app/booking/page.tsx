@@ -1,23 +1,40 @@
+
 "use client";
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { SERVICES, PROFESSIONALS, TIME_SLOTS, Service, Professional } from "@/lib/mock-data";
+import { SERVICES, TIME_SLOTS, Service, Professional } from "@/lib/mock-data";
 import { format, addDays, isSunday, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Check, Clock, User, Stethoscope, ArrowRight, ArrowLeft, Calendar as CalendarIcon, CalendarCheck } from "lucide-react";
+import { Check, Clock, User, Stethoscope, ArrowRight, ArrowLeft, Calendar as CalendarIcon, CalendarCheck, Loader2 } from "lucide-react";
 import Link from 'next/link';
+import { useFirestore, useCollection, useUser, useMemoFirebase } from '@/firebase';
+import { collection, query, where, addDoc } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
 
 export default function BookingPage() {
   const router = useRouter();
+  const { user } = useUser();
+  const db = useFirestore();
+  const { toast } = useToast();
+  
   const [step, setStep] = useState(1);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedProfessional, setSelectedProfessional] = useState<Professional | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [confirmedDate, setConfirmedDate] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Buscar profissionais reais do banco
+  const profQuery = useMemoFirebase(() => {
+    if (!db) return null;
+    return query(collection(db, 'users'), where('role', '==', 'professional'));
+  }, [db]);
+
+  const { data: professionals, isLoading: isLoadingProfs } = useCollection(profQuery);
 
   const handleNext = () => setStep(s => s + 1);
   const handleBack = () => {
@@ -26,6 +43,37 @@ export default function BookingPage() {
       return;
     }
     setStep(s => s - 1);
+  };
+
+  const handleConfirmBooking = async () => {
+    if (!db || !user || !selectedService || !selectedProfessional || !selectedDate || !selectedTime) return;
+    
+    setIsSubmitting(true);
+    try {
+      const appointmentData = {
+        patientId: user.uid,
+        patientName: user.displayName || 'Paciente',
+        professionalId: selectedProfessional.id,
+        professionalName: selectedProfessional.name,
+        serviceId: selectedService.id,
+        serviceName: selectedService.name,
+        date: format(selectedDate, 'yyyy-MM-dd'),
+        time: selectedTime,
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      };
+
+      await addDoc(collection(db, 'appointments'), appointmentData);
+      setStep(5);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao agendar",
+        description: "Não foi possível completar seu agendamento."
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const availableDates = useMemo(() => {
@@ -90,26 +138,33 @@ export default function BookingPage() {
         {step === 2 && (
           <div className="grid gap-6 animate-in fade-in slide-in-from-right-4 duration-500">
             <h2 className="text-3xl font-headline font-bold">Com qual especialista?</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {PROFESSIONALS.map((p) => (
-                <Card 
-                  key={p.id} 
-                  className={`cursor-pointer transition-all border-2 rounded-3xl overflow-hidden ${selectedProfessional?.id === p.id ? 'border-primary bg-primary/5' : 'hover:border-primary/50'}`}
-                  onClick={() => setSelectedProfessional(p)}
-                >
-                  <CardHeader className="items-center text-center p-6">
-                    <div className="relative mb-4">
-                      <img src={p.imageUrl} alt={p.name} className="w-24 h-24 rounded-full border-4 border-white shadow-xl" />
-                      {selectedProfessional?.id === p.id && (
-                        <div className="absolute -bottom-1 -right-1 bg-primary text-white p-1 rounded-full"><Check className="w-4 h-4" /></div>
-                      )}
-                    </div>
-                    <CardTitle className="text-lg">{p.name}</CardTitle>
-                    <CardDescription className="text-primary font-bold text-xs uppercase tracking-tighter">{p.specialty}</CardDescription>
-                  </CardHeader>
-                </Card>
-              ))}
-            </div>
+            {isLoadingProfs ? (
+              <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {professionals?.map((p) => (
+                  <Card 
+                    key={p.id} 
+                    className={`cursor-pointer transition-all border-2 rounded-3xl overflow-hidden ${selectedProfessional?.id === p.id ? 'border-primary bg-primary/5' : 'hover:border-primary/50'}`}
+                    onClick={() => setSelectedProfessional(p as unknown as Professional)}
+                  >
+                    <CardHeader className="items-center text-center p-6">
+                      <div className="relative mb-4">
+                        <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center border-4 border-white shadow-xl text-primary text-2xl font-bold">
+                          {p.name.substring(0,2).toUpperCase()}
+                        </div>
+                        {selectedProfessional?.id === p.id && (
+                          <div className="absolute -bottom-1 -right-1 bg-primary text-white p-1 rounded-full"><Check className="w-4 h-4" /></div>
+                        )}
+                      </div>
+                      <CardTitle className="text-lg">{p.name}</CardTitle>
+                      <CardDescription className="text-primary font-bold text-xs uppercase tracking-tighter">Colaborador Sync</CardDescription>
+                    </CardHeader>
+                  </Card>
+                ))}
+                {professionals?.length === 0 && <p className="col-span-full text-center text-muted-foreground py-10">Nenhum profissional disponível no momento.</p>}
+              </div>
+            )}
             <div className="flex justify-between pt-4">
               <Button variant="outline" onClick={handleBack} className="rounded-full px-8">Voltar</Button>
               <Button disabled={!selectedProfessional} onClick={handleNext} className="rounded-full px-10 h-12 shadow-lg">
@@ -225,8 +280,12 @@ export default function BookingPage() {
                 </div>
               </CardContent>
               <CardFooter className="p-10">
-                <Button onClick={handleNext} className="w-full h-14 rounded-full text-xl font-bold shadow-xl bg-accent hover:bg-accent/90 text-white transition-all hover:translate-y-[-2px]">
-                  Confirmar Agora
+                <Button 
+                  onClick={handleConfirmBooking} 
+                  disabled={isSubmitting}
+                  className="w-full h-14 rounded-full text-xl font-bold shadow-xl bg-accent hover:bg-accent/90 text-white transition-all hover:translate-y-[-2px]"
+                >
+                  {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : "Confirmar Agora"}
                 </Button>
               </CardFooter>
             </Card>

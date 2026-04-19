@@ -5,20 +5,35 @@ import { useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MOCK_APPOINTMENTS, SERVICES, PROFESSIONALS } from "@/lib/mock-data";
+import { SERVICES } from "@/lib/mock-data";
 import { Calendar as CalendarIcon, Clock, User, Stethoscope, ChevronRight, Settings, LogOut, Bell, Loader2 } from "lucide-react";
 import Link from 'next/link';
-import { useAuth, useUser } from '@/firebase';
+import { useAuth, useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { collection, query, where, orderBy } from 'firebase/firestore';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 export default function PatientDashboard() {
   const { user, isUserLoading } = useUser();
   const auth = useAuth();
+  const db = useFirestore();
   const router = useRouter();
   const { toast } = useToast();
+
+  const appointmentsQuery = useMemoFirebase(() => {
+    if (!db || !user) return null;
+    return query(
+      collection(db, 'appointments'),
+      where('patientId', '==', user.uid),
+      orderBy('createdAt', 'desc')
+    );
+  }, [db, user]);
+
+  const { data: appointments, isLoading: isLoadingAppointments } = useCollection(appointmentsQuery);
 
   useEffect(() => {
     if (!isUserLoading && !user) {
@@ -30,31 +45,16 @@ export default function PatientDashboard() {
     if (!auth) return;
     try {
       await signOut(auth);
-      toast({
-        title: "Sessão encerrada",
-        description: "Você saiu com sucesso.",
-      });
+      toast({ title: "Sessão encerrada" });
       router.push('/');
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Erro ao sair",
-        description: "Não foi possível encerrar a sessão.",
-      });
+      toast({ variant: "destructive", title: "Erro ao sair" });
     }
   };
 
-  if (isUserLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
+  if (isUserLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!user) return null;
 
-  const userAppointments = MOCK_APPOINTMENTS.filter(a => a.patientId === 'u1'); 
   const userInitials = user.displayName?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
 
   return (
@@ -96,10 +96,11 @@ export default function PatientDashboard() {
               <CalendarIcon className="text-primary h-5 w-5" /> Minha Agenda
             </h2>
             
-            {userAppointments.length > 0 ? (
+            {isLoadingAppointments ? (
+              <div className="flex justify-center p-10"><Loader2 className="animate-spin text-primary" /></div>
+            ) : appointments && appointments.length > 0 ? (
               <div className="space-y-4">
-                {userAppointments.map(apt => {
-                  const prof = PROFESSIONALS.find(p => p.id === apt.professionalId);
+                {appointments.map(apt => {
                   const service = SERVICES.find(s => s.id === apt.serviceId);
                   return (
                     <Card key={apt.id} className="overflow-hidden border-none shadow-sm hover:shadow-md transition-shadow">
@@ -110,19 +111,15 @@ export default function PatientDashboard() {
                               <Badge variant={apt.status === 'confirmed' ? 'secondary' : 'outline'}>
                                 {apt.status === 'confirmed' ? 'Confirmado' : 'Em Análise'}
                               </Badge>
-                              <h3 className="text-xl font-bold mt-2">{service?.name}</h3>
+                              <h3 className="text-xl font-bold mt-2">{apt.serviceName || service?.name}</h3>
                             </div>
-                            <p className="text-lg font-bold text-primary">R$ {service?.price}</p>
+                            <p className="text-lg font-bold text-primary">R$ {service?.price || '...'}</p>
                           </div>
                           
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-muted-foreground">
-                            <div className="flex items-center gap-2"><User className="w-4 h-4" /> {prof?.name}</div>
+                            <div className="flex items-center gap-2"><User className="w-4 h-4" /> {apt.professionalName}</div>
                             <div className="flex items-center gap-2"><Clock className="w-4 h-4" /> {apt.date} às {apt.time}</div>
                           </div>
-                        </div>
-                        <div className="bg-muted/30 p-4 flex md:flex-col justify-center gap-2 border-t md:border-t-0 md:border-l">
-                          <Button variant="outline" size="sm" className="rounded-full">Alterar</Button>
-                          <Button variant="ghost" size="sm" className="text-destructive rounded-full">Cancelar</Button>
                         </div>
                       </div>
                     </Card>
@@ -152,19 +149,6 @@ export default function PatientDashboard() {
                   </CardTitle>
                 </CardHeader>
               </Card>
-              <Card className="cursor-pointer hover:bg-primary/5 transition-colors border-none shadow-sm">
-                <CardHeader className="p-4">
-                  <CardTitle className="text-sm flex items-center justify-between">
-                    Pagamentos <ChevronRight className="w-4 h-4" />
-                  </CardTitle>
-                </CardHeader>
-              </Card>
-            </div>
-            
-            <div className="pt-4 border-t">
-               <Button variant="ghost" className="w-full justify-start rounded-xl text-destructive" onClick={handleLogout}>
-                <LogOut className="mr-2 h-4 w-4" /> Sair da Conta
-               </Button>
             </div>
           </div>
         </div>
