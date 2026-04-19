@@ -27,7 +27,6 @@ export default function AuthPage() {
       });
       router.push('/dashboard');
     } catch (error: any) {
-      console.error(error);
       toast({
         variant: "destructive",
         title: "Erro na autenticação",
@@ -50,14 +49,14 @@ export default function AuthPage() {
             Acesso à Clínica
           </h2>
           <p className="text-muted-foreground">
-            Entre para gerenciar seus agendamentos de forma segura.
+            Entre exclusivamente com sua conta Google para segurança.
           </p>
         </div>
 
         <Card className="shadow-2xl border-t-4 border-t-primary">
           <CardHeader className="space-y-1">
             <CardTitle className="text-xl text-center">Entrar</CardTitle>
-            <CardDescription className="text-center">Utilize sua conta Google para continuar</CardDescription>
+            <CardDescription className="text-center">Utilize sua conta institucional ou pessoal Google</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             <Button 
@@ -83,12 +82,12 @@ export default function AuthPage() {
                   fill="#EA4335"
                 />
               </svg>
-              Entrar com Google
+              Continuar com Google
             </Button>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
             <p className="text-center w-full text-xs text-muted-foreground px-6">
-              Ao continuar, você concorda com nossos Termos de Serviço e Política de Privacidade.
+              O Sync utiliza autenticação segura via Google Identity Services.
             </p>
           </CardFooter>
         </Card>

@@ -38,7 +38,6 @@ export default function AdminDashboard() {
         messageType: 'confirmation'
       });
 
-      console.log("AI Message:", message);
       toast({
         title: "Agendamento Confirmado",
         description: "Notificação enviada ao paciente via IA.",
@@ -65,7 +64,6 @@ export default function AdminDashboard() {
         }]
       });
 
-      console.log("Billing Summary:", res.billingSummary);
       toast({
         title: "Resumo de Faturamento Gerado",
         description: `Total: R$ ${res.totalCost}`,
@@ -137,7 +135,6 @@ export default function AdminDashboard() {
         <TabsList className="bg-muted/50 p-1 rounded-xl mb-6 inline-flex border shadow-sm">
           <TabsTrigger value="appointments" className="rounded-lg px-6 data-[state=active]:bg-primary data-[state=active]:text-white transition-all">Agendamentos</TabsTrigger>
           <TabsTrigger value="professionals" className="rounded-lg px-6 data-[state=active]:bg-primary data-[state=active]:text-white transition-all">Profissionais</TabsTrigger>
-          <TabsTrigger value="patients" className="rounded-lg px-6 data-[state=active]:bg-primary data-[state=active]:text-white transition-all">Pacientes</TabsTrigger>
           <TabsTrigger value="billing" className="rounded-lg px-6 data-[state=active]:bg-primary data-[state=active]:text-white transition-all">Faturamento IA</TabsTrigger>
         </TabsList>
         
@@ -232,10 +229,6 @@ export default function AdminDashboard() {
                   <Button variant="ghost" size="icon" className="ml-auto rounded-full hover:bg-primary/10"><Clock className="w-4 h-4 text-primary" /></Button>
                 </div>
               ))}
-              <Button variant="outline" className="h-full border-dashed rounded-2xl border-2 flex-col gap-2 min-h-[100px] hover:bg-muted/50 transition-colors">
-                <span className="text-2xl font-light">+</span>
-                <span className="text-xs font-bold uppercase tracking-widest">Adicionar Profissional</span>
-              </Button>
             </CardContent>
            </Card>
         </TabsContent>
@@ -255,20 +248,7 @@ export default function AdminDashboard() {
                   </h4>
                   <p className="text-sm text-muted-foreground leading-relaxed">
                     O assistente processa dados de procedimentos complexos e gera descrições simplificadas para o faturamento. 
-                    Isso reduz erros manuais em até 95% e aumenta a velocidade de emissão de recibos.
                   </p>
-               </div>
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Button size="lg" className="rounded-2xl h-28 flex-col gap-2 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all hover:translate-y-[-2px]">
-                     <FileText className="h-7 w-7" />
-                     <span className="font-bold">Relatório Mensal</span>
-                     <span className="text-[10px] opacity-80 uppercase tracking-widest">Consolidado Financeiro</span>
-                  </Button>
-                  <Button size="lg" variant="outline" className="rounded-2xl h-28 flex-col gap-2 border-primary text-primary hover:bg-primary/5 transition-all hover:translate-y-[-2px]">
-                     <Users className="h-7 w-7" />
-                     <span className="font-bold">Análise de Performance</span>
-                     <span className="text-[10px] opacity-80 uppercase tracking-widest">Rentabilidade por Profissional</span>
-                  </Button>
                </div>
             </CardContent>
            </Card>
