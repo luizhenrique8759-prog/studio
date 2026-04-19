@@ -9,19 +9,19 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() && (
-        exists(/databases/$(database)/documents/app_roles/admin/$(request.auth.uid)) ||
+        exists(/databases/$(database)/documents/app_roles/admin/users/$(request.auth.uid)) ||
         request.auth.token.email == "luizhenrique8759@gmail.com"
       );
     }
 
     function getAuthorityLevel() {
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
-      return userDoc != null ? userDoc.data.authorityLevel : 0;
+      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(userPath) ? get(userPath).data.authorityLevel : 0;
     }
 
     function isProfessional() {
       return isSignedIn() && (
-        exists(/databases/$(database)/documents/app_roles/professional/$(request.auth.uid)) ||
+        exists(/databases/$(database)/documents/app_roles/professional/users/$(request.auth.uid)) ||
         isAdmin()
       );
     }
@@ -37,7 +37,7 @@ service cloud.firestore {
       allow get, list, create, update: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 2);
     }
 
-    match /app_roles/{role}/{userId} {
+    match /app_roles/{role}/users/{userId} {
       allow get: if isSignedIn();
       allow write: if isAdmin(); 
     }

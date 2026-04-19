@@ -38,16 +38,22 @@ export default function AdminDashboard() {
   }, [db, user]);
   const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
+  const isAdmin = user?.email === HARDCODED_ADMIN_EMAIL;
+  const authorityLevel = userData?.authorityLevel || 0;
+  const isProfessional = userData?.role === 'professional' || isAdmin;
+
+  // Apenas busca usuários se for admin ou profissional autorizado
   const usersRef = useMemoFirebase(() => {
-    if (!user || !db) return null;
+    if (!user || !db || !isProfessional || isUserLoading || isLoadingUserData) return null;
     return collection(db, 'users');
-  }, [db, user]);
+  }, [db, user, isProfessional, isUserLoading, isLoadingUserData]);
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
 
+  // Apenas busca agendamentos se for profissional autorizado
   const apptsQuery = useMemoFirebase(() => {
-    if (!db || !user) return null;
+    if (!db || !user || !isProfessional || isUserLoading || isLoadingUserData) return null;
     return query(collection(db, 'appointments'), orderBy('date', 'asc'), orderBy('time', 'asc'));
-  }, [db, user]);
+  }, [db, user, isProfessional, isUserLoading, isLoadingUserData]);
   const { data: appointments, isLoading: isLoadingAppts } = useCollection(apptsQuery);
 
   const [loading, setLoading] = useState<string | null>(null);
@@ -66,13 +72,9 @@ export default function AdminDashboard() {
     }
   }, [user, isUserLoading, router]);
 
-  const isAdmin = user?.email === HARDCODED_ADMIN_EMAIL;
-  const authorityLevel = userData?.authorityLevel || 0;
-  const isProfessional = userData?.role === 'professional' || isAdmin;
-
   // Hierarquia de Permissões
   const canViewRecords = isAdmin || authorityLevel >= 2;
-  const canUseIA = isAdmin || authorityLevel >= 4; // IA Evolução só para Dentista (4) ou Admin
+  const canUseIA = isAdmin || authorityLevel >= 4; 
   const canViewManagement = isAdmin || authorityLevel >= 3;
   const canViewFinance = isAdmin || authorityLevel >= 3;
   const canEditRoles = isAdmin;
@@ -247,7 +249,7 @@ export default function AdminDashboard() {
                         </TableCell>
                       </TableRow>
                     ))}
-                    {appointments?.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">Nenhum agendamento encontrado.</TableCell></TableRow>}
+                    {!isLoadingAppts && appointments?.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">Nenhum agendamento encontrado.</TableCell></TableRow>}
                   </TableBody>
                 </Table>
               )}
