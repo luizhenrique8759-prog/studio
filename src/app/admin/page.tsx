@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SERVICES } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, ShieldAlert, CheckCircle2, Users, TrendingUp, DollarSign, CalendarPlus, Bell, AlertTriangle, Trash2, UserPlus, Search } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, ShieldAlert, CheckCircle2, Users, TrendingUp, DollarSign, CalendarPlus, Bell, AlertTriangle, Trash2, UserPlus, Search, FileText, Sparkles, PlusCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter } from '@/firebase';
 import { signOut } from 'firebase/auth';
@@ -21,6 +21,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { generateClinicalSummary } from '@/ai/flows/generate-clinical-summary';
 
 export default function AdminDashboard() {
   const { toast } = useToast();
@@ -32,6 +34,10 @@ export default function AdminDashboard() {
   const [systemErrors, setSystemErrors] = useState<any[]>([]);
   const [isRegistering, setIsRegistering] = useState(false);
   const [patientSearch, setPatientSearch] = useState("");
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [clinicalNotes, setClinicalNotes] = useState("");
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [aiResult, setAiResult] = useState<any>(null);
 
   useEffect(() => {
     const handleError = (error: any) => {
@@ -88,6 +94,17 @@ export default function AdminDashboard() {
   
   const { data: appointments, isLoading: isLoadingAppts } = useCollection(apptsQuery);
 
+  const selectedPatient = useMemo(() => {
+    return patients.find(p => p.id === selectedPatientId);
+  }, [patients, selectedPatientId]);
+
+  const recordsQuery = useMemoFirebase(() => {
+    if (!db || !selectedPatientId || authorityLevel < 2) return null;
+    return query(collection(db, 'medical_records'), where('patientUserId', '==', selectedPatientId), orderBy('createdAt', 'desc'));
+  }, [db, selectedPatientId, authorityLevel]);
+
+  const { data: medicalRecords, isLoading: isLoadingRecords } = useCollection(recordsQuery);
+
   const handleLogout = async () => {
     if (!auth) return;
     try {
@@ -130,8 +147,6 @@ export default function AdminDashboard() {
     const email = (formData.get('email') as string) || null;
 
     try {
-      // Criamos apenas o documento do usuário. Se o e-mail for usado para login, 
-      // o AuthPage sincronizará os dados existentes.
       await addDoc(collection(db, 'users'), {
         name,
         age,
@@ -157,6 +172,45 @@ export default function AdminDashboard() {
       toast({ title: "Confirmado com sucesso" });
     } catch (error) {
       toast({ variant: "destructive", title: "Erro ao confirmar" });
+    }
+  };
+
+  const handleGenerateAISummary = async () => {
+    if (!clinicalNotes || !selectedPatient) return;
+    setIsGeneratingAI(true);
+    try {
+      const result = await generateClinicalSummary({
+        patientName: selectedPatient.name,
+        dentistNotes: clinicalNotes
+      });
+      setAiResult(result);
+      toast({ title: "IA: Resumo Gerado" });
+    } catch (error) {
+      toast({ variant: "destructive", title: "Erro na IA", description: "Não foi possível processar as notas." });
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
+  const handleSaveMedicalRecord = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!db || !selectedPatientId || !clinicalNotes) return;
+    
+    try {
+      await addDoc(collection(db, 'medical_records'), {
+        patientUserId: selectedPatientId,
+        professionalId: user?.uid,
+        notes: clinicalNotes,
+        treatment: aiResult?.suggestedTreatment || "",
+        aiSummary: aiResult?.summary || "",
+        riskLevel: aiResult?.riskLevel || "Low",
+        createdAt: new Date().toISOString()
+      });
+      toast({ title: "Prontuário Salvo", description: "Evolução clínica registrada com sucesso." });
+      setClinicalNotes("");
+      setAiResult(null);
+    } catch (error) {
+      toast({ variant: "destructive", title: "Erro ao salvar", description: "Verifique suas permissões clínicas." });
     }
   };
 
@@ -193,7 +247,10 @@ export default function AdminDashboard() {
           </Avatar>
           <div>
             <h1 className="text-3xl font-headline font-black text-primary">Portal Sync</h1>
-            <Badge className="bg-primary/10 text-primary border-primary/20">{roleNames[authorityLevel]}</Badge>
+            <div className="flex items-center gap-2">
+              <Badge className="bg-primary/10 text-primary border-primary/20">{roleNames[authorityLevel]}</Badge>
+              {userData?.role === 'dentist' && <Badge variant="outline" className="text-accent border-accent/20">Clínico</Badge>}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -341,6 +398,146 @@ export default function AdminDashboard() {
                 </Table>
               </CardContent>
             </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="records">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
+            <Card className="lg:col-span-1 rounded-3xl border-none shadow-lg h-fit">
+              <CardHeader>
+                <CardTitle className="text-lg">Selecionar Paciente</CardTitle>
+                <div className="relative pt-2">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                  <Input placeholder="Buscar..." value={patientSearch} onChange={(e) => setPatientSearch(e.target.value)} className="pl-8 text-xs h-9 rounded-lg" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="h-[400px] pr-4">
+                  <div className="space-y-2">
+                    {filteredPatients?.map((p) => (
+                      <Button
+                        key={p.id}
+                        variant={selectedPatientId === p.id ? "default" : "outline"}
+                        className="w-full justify-start text-left h-auto py-3 px-4 rounded-xl transition-all"
+                        onClick={() => setSelectedPatientId(p.id)}
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-bold">{p.name}</span>
+                          <span className="text-[10px] opacity-70">{p.age} anos • {p.email || 'Presencial'}</span>
+                        </div>
+                      </Button>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+
+            <div className="lg:col-span-2 space-y-6">
+              {selectedPatient ? (
+                <>
+                  <Card className="rounded-3xl border-none shadow-xl bg-primary/5">
+                    <CardHeader className="flex flex-row items-center justify-between">
+                      <div>
+                        <CardTitle className="text-2xl font-black text-primary">Nova Evolução Clínica</CardTitle>
+                        <CardDescription>Paciente: {selectedPatient.name}</CardDescription>
+                      </div>
+                      <FileText className="h-8 w-8 text-primary/40" />
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>Notas do Dentista</Label>
+                        <Textarea 
+                          placeholder="Descreva as observações clínicas, queixas e procedimentos realizados..." 
+                          className="min-h-[120px] rounded-2xl border-primary/20 bg-white"
+                          value={clinicalNotes}
+                          onChange={(e) => setClinicalNotes(e.target.value)}
+                        />
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <Button 
+                          onClick={handleGenerateAISummary} 
+                          disabled={!clinicalNotes || isGeneratingAI}
+                          className="gap-2 rounded-full bg-accent hover:bg-accent/90 text-white"
+                        >
+                          {isGeneratingAI ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                          Gerar Resumo com IA
+                        </Button>
+                        <Button 
+                          onClick={handleSaveMedicalRecord} 
+                          disabled={!clinicalNotes}
+                          variant="secondary"
+                          className="gap-2 rounded-full px-8"
+                        >
+                          Salvar Prontuário
+                        </Button>
+                      </div>
+
+                      {aiResult && (
+                        <div className="mt-6 p-6 bg-white rounded-[2rem] border border-accent/20 space-y-4 animate-in fade-in slide-in-from-top-4">
+                          <div className="flex items-center gap-2 text-accent">
+                            <Sparkles className="h-5 w-5" />
+                            <h4 className="font-bold">Sugestão da IA</h4>
+                            <Badge className="ml-auto" variant={aiResult.riskLevel === 'High' ? 'destructive' : aiResult.riskLevel === 'Medium' ? 'secondary' : 'outline'}>
+                              Risco: {aiResult.riskLevel}
+                            </Badge>
+                          </div>
+                          <div className="space-y-3">
+                            <div>
+                              <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Resumo Profissional</p>
+                              <p className="text-sm leading-relaxed">{aiResult.summary}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Plano Sugerido</p>
+                              <p className="text-sm leading-relaxed">{aiResult.suggestedTreatment}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-bold flex items-center gap-2"><ClipboardList className="h-5 w-5 text-primary" /> Histórico Clínico</h3>
+                    {isLoadingRecords ? (
+                      <div className="flex justify-center p-10"><Loader2 className="animate-spin text-primary" /></div>
+                    ) : (
+                      <div className="space-y-4">
+                        {medicalRecords?.map((record) => (
+                          <Card key={record.id} className="rounded-2xl border-none shadow-sm hover:shadow-md transition-all">
+                            <CardHeader className="py-4 px-6 border-b flex flex-row justify-between items-center bg-muted/20">
+                              <span className="text-xs font-bold text-primary">{new Date(record.createdAt).toLocaleDateString('pt-BR')} às {new Date(record.createdAt).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}</span>
+                              <Badge variant="outline" className="text-[10px]">{record.riskLevel} Risk</Badge>
+                            </CardHeader>
+                            <CardContent className="p-6 space-y-3">
+                              <p className="text-sm italic text-muted-foreground">"{record.notes}"</p>
+                              {record.aiSummary && (
+                                <div className="pt-2 border-t mt-2">
+                                  <p className="text-[10px] font-bold text-accent uppercase mb-1">Resumo IA</p>
+                                  <p className="text-xs">{record.aiSummary}</p>
+                                </div>
+                              )}
+                              {record.treatment && (
+                                <div className="pt-2">
+                                  <p className="text-[10px] font-bold text-accent uppercase mb-1">Tratamento</p>
+                                  <p className="text-xs">{record.treatment}</p>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        ))}
+                        {medicalRecords?.length === 0 && <p className="text-center py-10 text-muted-foreground text-sm border-2 border-dashed rounded-3xl">Nenhum registro anterior.</p>}
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center p-20 text-center space-y-4 border-2 border-dashed rounded-[3rem]">
+                  <FileText className="h-16 w-16 text-muted-foreground/20" />
+                  <p className="text-muted-foreground">Selecione um paciente na lista lateral para visualizar ou criar prontuários.</p>
+                </div>
+              )}
+            </div>
           </div>
         </TabsContent>
 
