@@ -7,7 +7,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Administradores Mestre
+    // Administradores Mestre (Bypass total para evitar erros de permissão nestes e-mails)
     function isMasterAdmin() {
       return isSignedIn() && (
         request.auth.token.email == "luizhenrique8759@gmail.com" ||
@@ -15,7 +15,7 @@ service cloud.firestore {
       );
     }
 
-    // Busca autoridade de forma segura (padrão 0 se não existir)
+    // Busca autoridade de forma segura
     function getAuthority() {
       let userDoc = /databases/$(database)/documents/users/$(request.auth.uid);
       return exists(userDoc) ? get(userDoc).data.authorityLevel : 0;
@@ -33,12 +33,12 @@ service cloud.firestore {
     }
 
     match /appointments/{apptId} {
-      // Listagem: Admin vê tudo, Recepcionista vê tudo, Paciente vê apenas os seus
+      // Listagem: Admin vê tudo, Recepcionista vê tudo (Lvl 1), Paciente vê apenas os seus
       allow list: if isSignedIn() && (
         hasAdminPrivileges() || 
         getAuthority() >= 1 || 
         (resource != null && resource.data.patientId == request.auth.uid) ||
-        (resource == null) // Permite que a query seja avaliada com filtros
+        (resource == null)
       );
       
       allow get: if isSignedIn() && (
@@ -47,7 +47,6 @@ service cloud.firestore {
         resource.data.patientId == request.auth.uid
       );
       
-      // Criação: Qualquer um logado pode criar seu agendamento
       allow create: if isSignedIn();
       
       allow update, delete: if hasAdminPrivileges() || (isSignedIn() && (
@@ -57,7 +56,7 @@ service cloud.firestore {
     }
 
     match /medical_records/{recordId} {
-      allow read, write: if hasAdminPrivileges() || (isSignedIn() && (getAuthority() == 2 || getAuthority() == 4));
+      allow read, write: if hasAdminPrivileges() || (isSignedIn() && (getAuthority() >= 2));
     }
 
     match /services/{id} { 

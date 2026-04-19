@@ -8,15 +8,17 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SERVICES } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, Search, ShieldAlert, CheckCircle2, Shield, Stethoscope, Activity, UserCog, Users, TrendingUp, DollarSign, CalendarPlus } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, Search, ShieldAlert, CheckCircle2, Shield, Stethoscope, Activity, UserCog, Users, TrendingUp, DollarSign, CalendarPlus, Bell, AlertTriangle, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
+import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { collection, doc, updateDoc, query, orderBy } from 'firebase/firestore';
 import Link from 'next/link';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function AdminDashboard() {
   const { toast } = useToast();
@@ -24,6 +26,23 @@ export default function AdminDashboard() {
   const db = useFirestore();
   const { user, isUserLoading } = useUser();
   const router = useRouter();
+
+  const [systemErrors, setSystemErrors] = useState<any[]>([]);
+
+  useEffect(() => {
+    const handleError = (error: any) => {
+      setSystemErrors(prev => [{
+        id: Date.now(),
+        message: error.message || "Erro desconhecido",
+        path: error.request?.path || "N/A",
+        operation: error.request?.method || "unknown",
+        timestamp: new Date().toLocaleTimeString()
+      }, ...prev].slice(0, 10));
+    };
+
+    errorEmitter.on('permission-error', handleError);
+    return () => errorEmitter.off('permission-error', handleError);
+  }, []);
 
   const userDocRef = useMemoFirebase(() => {
     if (!user || !db) return null;
@@ -33,7 +52,8 @@ export default function AdminDashboard() {
   const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
   const authorityLevel = useMemo(() => {
-    const email = user?.email;
+    if (!user) return 0;
+    const email = user.email;
     if (email === "luizhenrique8759@gmail.com") return 4;
     if (email === "luiz87596531@gmail.com") return 3;
     return userData?.authorityLevel || 0;
@@ -44,7 +64,6 @@ export default function AdminDashboard() {
     return authorityLevel >= 1;
   }, [isUserLoading, authorityLevel]);
 
-  // Coleções filtradas pela autoridade
   const usersRef = useMemoFirebase(() => {
     if (!db || !isAuthorized || authorityLevel < 3) return null;
     return query(collection(db, 'users'), orderBy('name', 'asc'));
@@ -151,7 +170,53 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="icon" className={`rounded-full relative ${systemErrors.length > 0 ? 'animate-pulse border-destructive text-destructive' : ''}`}>
+                <Bell className="h-5 w-5" />
+                {systemErrors.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-destructive text-white text-[10px] font-bold h-4 w-4 rounded-full flex items-center justify-center">
+                    {systemErrors.length}
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0 rounded-2xl overflow-hidden shadow-2xl border-destructive/20" align="end">
+              <div className="bg-destructive/5 p-4 border-b flex justify-between items-center">
+                <h3 className="font-bold text-sm flex items-center gap-2 text-destructive">
+                  <AlertTriangle className="h-4 w-4" /> Monitor de Sistema
+                </h3>
+                {systemErrors.length > 0 && (
+                  <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={() => setSystemErrors([])}>
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+              <ScrollArea className="h-[300px]">
+                {systemErrors.length > 0 ? (
+                  <div className="p-2 space-y-2">
+                    {systemErrors.map(err => (
+                      <div key={err.id} className="p-3 bg-white border rounded-xl space-y-1 shadow-sm">
+                        <div className="flex justify-between items-center">
+                          <Badge variant="destructive" className="text-[8px] h-4 uppercase">{err.operation}</Badge>
+                          <span className="text-[10px] text-muted-foreground font-mono">{err.timestamp}</span>
+                        </div>
+                        <p className="text-xs font-bold line-clamp-2">{err.message}</p>
+                        <p className="text-[9px] text-muted-foreground font-mono break-all bg-muted/30 p-1 rounded">Path: {err.path}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center p-12 text-center space-y-2">
+                    <CheckCircle2 className="h-8 w-8 text-accent/50" />
+                    <p className="text-xs font-medium text-muted-foreground">Nenhum erro detectado no momento.</p>
+                  </div>
+                )}
+              </ScrollArea>
+            </PopoverContent>
+          </Popover>
+
           {authorityLevel >= 3 && (
             <Button asChild className="rounded-full bg-accent hover:bg-accent/90 text-white font-bold px-8 shadow-lg">
               <Link href="/booking"><CalendarPlus className="mr-2 h-5 w-5" /> Novo Agendamento</Link>
