@@ -31,7 +31,12 @@ export default function AdminDashboard() {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
   
-  const usersRef = useMemoFirebase(() => collection(db, 'users'), [db]);
+  // Guardamos a referência da coleção para só buscar se o usuário estiver logado e for admin
+  const usersRef = useMemoFirebase(() => {
+    if (!user || !db || user.email !== HARDCODED_ADMIN_EMAIL) return null;
+    return collection(db, 'users');
+  }, [db, user]);
+
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
 
   const [appointments, setAppointments] = useState<Appointment[]>(MOCK_APPOINTMENTS);
