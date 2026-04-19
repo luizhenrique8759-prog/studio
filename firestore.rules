@@ -3,7 +3,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ADMIN MESTRE: Acesso absoluto via e-mail do token (mais seguro e rápido)
+    // Função para verificar se é o administrador mestre pelo e-mail do token
     function isMasterAdmin() {
       return request.auth != null && request.auth.token.email == "luizhenrique8759@gmail.com";
     }
@@ -12,12 +12,12 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Busca autoridade do usuário logado
+    // Busca autoridade do usuário logado (usado para colaboradores)
     function getAuthority() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.authorityLevel;
     }
 
-    // Regra Global Master Admin
+    // Regra Global Master Admin: Acesso total e absoluto
     match /{document=**} {
       allow read, write: if isMasterAdmin();
     }
@@ -26,23 +26,23 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && (isMasterAdmin() || getAuthority() >= 3);
-      allow create, update: if isSignedIn() && request.auth.uid == userId;
+      allow create, update: if isSignedIn() && (request.auth.uid == userId || isMasterAdmin());
     }
 
     // Agendamentos (Appointments)
     match /appointments/{apptId} {
-      // Regra para listagem: Profissionais ou o próprio paciente (com filtro obrigatório)
+      // Permitir listagem total para Master Admin ou Colaboradores Nível 1+
+      // Pacientes só podem listar se usarem o filtro de patientId no código
       allow list: if isSignedIn() && (
         isMasterAdmin() || 
         getAuthority() >= 1 || 
-        resource.data.patientId == request.auth.uid
+        (resource != null && resource.data.patientId == request.auth.uid)
       );
       
-      // Regra para leitura individual
       allow get: if isSignedIn() && (
         isMasterAdmin() || 
         getAuthority() >= 1 || 
-        resource.data.patientId == request.auth.uid
+        (resource != null && resource.data.patientId == request.auth.uid)
       );
       
       allow create: if isSignedIn();
@@ -54,7 +54,7 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && (isMasterAdmin() || getAuthority() >= 2);
     }
 
-    // Coleções Gerais
+    // Serviços e Coleções Gerais
     match /services/{id} { allow read: if true; allow write: if isMasterAdmin(); }
   }
 }

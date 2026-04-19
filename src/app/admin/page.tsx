@@ -27,8 +27,8 @@ export default function AdminDashboard() {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
 
-  // O Admin Mestre é determinado imediatamente pelo e-mail
-  const isMasterAdmin = user?.email === HARDCODED_ADMIN_EMAIL;
+  // Determinar se é o administrador mestre imediatamente pelo e-mail
+  const isMasterAdmin = useMemo(() => user?.email === HARDCODED_ADMIN_EMAIL, [user]);
 
   const userDocRef = useMemoFirebase(() => {
     if (!user || !db) return null;
@@ -49,9 +49,10 @@ export default function AdminDashboard() {
     return authorityLevel >= 1;
   }, [isMasterAdmin, isLoadingUserData, authorityLevel, isUserLoading]);
 
-  // Consultas estabilizadas
+  // Consultas estabilizadas e condicionais
   const usersRef = useMemoFirebase(() => {
-    if (!db || !isAuthorized || (authorityLevel < 3 && !isMasterAdmin)) return null;
+    if (!db || !isAuthorized) return null;
+    if (authorityLevel < 3 && !isMasterAdmin) return null;
     return query(collection(db, 'users'), orderBy('name', 'asc'));
   }, [db, isAuthorized, authorityLevel, isMasterAdmin]);
   
@@ -73,7 +74,7 @@ export default function AdminDashboard() {
     }
   }, [user, isUserLoading, router]);
 
-  const canViewRecords = isMasterAdmin || authorityLevel >= 2;
+  const canViewRecords = isMasterAdmin || authorityLevel >= 2 || authorityLevel === 4;
   const canViewManagement = isMasterAdmin || authorityLevel === 3;
   const canViewFinance = isMasterAdmin || authorityLevel === 3;
 
@@ -228,7 +229,7 @@ export default function AdminDashboard() {
                         </TableCell>
                       </TableRow>
                     ))}
-                    {!isLoadingAppts && appointments?.length === 0 && (
+                    {!isLoadingAppts && (appointments?.length === 0) && (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">Nenhum agendamento ativo.</TableCell>
                       </TableRow>
@@ -274,7 +275,7 @@ export default function AdminDashboard() {
                           <option value="1">Lvl 1 - Recepção (Agenda)</option>
                           <option value="2">Lvl 2 - Assistente (Agenda + Prontuário)</option>
                           <option value="3">Lvl 3 - Adm (Agenda + Financeiro + Equipe)</option>
-                          <option value="4">Lvl 4 - Dentista (Agenda + Prontuário Pleno)</option>
+                          <option value="4">Lvl 4 - Dentista (Agenda + Prontuário Clínico)</option>
                         </select>
                       </div>
                     </div>
@@ -289,15 +290,15 @@ export default function AdminDashboard() {
           <TabsContent value="billing">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               <Card className="bg-primary text-white border-none shadow-xl rounded-[2rem] p-8">
-                <p className="text-xs uppercase font-black opacity-60 mb-2 tracking-widest">Faturamento</p>
+                <p className="text-xs uppercase font-black opacity-60 mb-2 tracking-widest">Faturamento Estimado</p>
                 <p className="text-5xl font-black">R$ {totalBilling.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
               </Card>
               <Card className="bg-muted border-none shadow-xl rounded-[2rem] p-8">
-                <p className="text-xs uppercase font-black text-muted-foreground mb-2 tracking-widest">Total Consultas</p>
+                <p className="text-xs uppercase font-black text-muted-foreground mb-2 tracking-widest">Consultas Agendadas</p>
                 <p className="text-5xl font-black">{appointments?.length || 0}</p>
               </Card>
               <Card className="bg-accent text-white border-none shadow-xl rounded-[2rem] p-8">
-                <p className="text-xs uppercase font-black opacity-60 mb-2 tracking-widest">Base Pacientes</p>
+                <p className="text-xs uppercase font-black opacity-60 mb-2 tracking-widest">Pacientes Únicos</p>
                 <p className="text-5xl font-black">{allUsers?.filter(u => u.role === 'patient').length || 0}</p>
               </Card>
             </div>
@@ -348,7 +349,7 @@ export default function AdminDashboard() {
                     <CardContent className="p-10 flex flex-col items-center justify-center flex-1">
                       <div className="text-center space-y-4 max-w-sm opacity-30">
                         <Stethoscope className="h-20 w-20 mx-auto text-muted-foreground" />
-                        <p className="text-lg font-bold">Histórico e Evoluções Clínicas.</p>
+                        <p className="text-lg font-bold">Histórico e Evoluções Clínicas do Paciente.</p>
                       </div>
                     </CardContent>
                   </div>
