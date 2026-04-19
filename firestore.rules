@@ -6,12 +6,19 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Administrador "Blindado": Verifica documento ou e-mail específico
     function isAdmin() {
-      return isSignedIn() && exists(/databases/$(database)/documents/app_roles/admin/$(request.auth.uid));
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/app_roles/admin/$(request.auth.uid)) ||
+        request.auth.token.email == "SEU_EMAIL_AQUI@gmail.com"
+      );
     }
 
     function isProfessional() {
-      return isSignedIn() && exists(/databases/$(database)/documents/app_roles/professional/$(request.auth.uid));
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/app_roles/professional/$(request.auth.uid)) ||
+        isAdmin() // Admins também têm permissão de profissional
+      );
     }
 
     match /users/{userId} {
@@ -29,10 +36,9 @@ service cloud.firestore {
 
     match /app_roles/{role}/{userId} {
       allow get: if isSignedIn();
-      allow write: if false; // Managed via admin console or custom logic
+      allow write: if false; 
     }
     
-    // Default allow for other collections for prototyping
     match /appointments/{id} { allow read, write: if isSignedIn(); }
     match /services/{id} { allow read: if true; allow write: if isAdmin(); }
     match /professionals/{id} { allow read: if true; allow write: if isAdmin(); }

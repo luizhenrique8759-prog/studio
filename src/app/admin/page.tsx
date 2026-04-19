@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MOCK_APPOINTMENTS, SERVICES, PROFESSIONALS, Appointment } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Calendar, Users, DollarSign, FileText, Bell, CheckCircle2, Clock, Stethoscope, MessageSquare, Sparkles, LogOut, Loader2, ClipboardList, Plus, Search } from "lucide-react";
+import { Calendar, Users, DollarSign, FileText, Bell, CheckCircle2, Clock, Stethoscope, MessageSquare, Sparkles, LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert } from "lucide-react";
 import { generateBillingSummary } from "@/ai/flows/generate-billing-summary";
 import { generateAppointmentNotification } from "@/ai/flows/generate-appointment-notification";
 import { generateClinicalSummary } from "@/ai/flows/generate-clinical-summary";
@@ -19,6 +19,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+
+// E-mail do Administrador "Blindado"
+const HARDCODED_ADMIN_EMAIL = "SEU_EMAIL_AQUI@gmail.com";
 
 export default function AdminDashboard() {
   const { toast } = useToast();
@@ -38,6 +41,8 @@ export default function AdminDashboard() {
       router.push('/auth');
     }
   }, [user, isUserLoading, router]);
+
+  const isAdmin = user?.email === HARDCODED_ADMIN_EMAIL;
 
   const handleLogout = async () => {
     if (!auth) return;
@@ -97,6 +102,20 @@ export default function AdminDashboard() {
   if (isUserLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!user) return null;
 
+  // Se não for admin blindado, mostra aviso (embora as regras de segurança já bloqueiem o acesso aos dados)
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center space-y-4">
+        <ShieldAlert className="h-16 w-16 text-destructive animate-bounce" />
+        <h1 className="text-2xl font-bold">Acesso Restrito</h1>
+        <p className="text-muted-foreground max-w-md">
+          Esta área é exclusiva para administradores. Se você é um administrador, certifique-se de estar usando o e-mail configurado.
+        </p>
+        <Button onClick={handleLogout}>Sair e tentar outro e-mail</Button>
+      </div>
+    );
+  }
+
   const adminInitials = user.displayName?.substring(0, 2).toUpperCase() || 'AD';
 
   return (
@@ -109,7 +128,7 @@ export default function AdminDashboard() {
           </Avatar>
           <div>
             <h1 className="text-4xl font-headline font-bold text-primary tracking-tight">Portal Clínico</h1>
-            <p className="text-muted-foreground">Logado como: {user.displayName}</p>
+            <p className="text-muted-foreground">Admin: {user.email}</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -140,9 +159,9 @@ export default function AdminDashboard() {
 
       <Tabs defaultValue="appointments" className="w-full">
         <TabsList className="bg-muted/50 p-1 rounded-xl mb-6 inline-flex border shadow-sm">
-          <TabsTrigger value="appointments" className="rounded-lg px-6 data-[state=active]:bg-primary data-[state=active]:text-white">Agendamentos</TabsTrigger>
-          <TabsTrigger value="records" className="rounded-lg px-6 data-[state=active]:bg-primary data-[state=active]:text-white">Prontuários IA</TabsTrigger>
-          <TabsTrigger value="billing" className="rounded-lg px-6 data-[state=active]:bg-primary data-[state=active]:text-white">Faturamento</TabsTrigger>
+          <TabsTrigger value="appointments" className="rounded-lg px-6 data-[state=active]:bg-primary data-[state=active]:text-white font-bold">Agendamentos</TabsTrigger>
+          <TabsTrigger value="records" className="rounded-lg px-6 data-[state=active]:bg-primary data-[state=active]:text-white font-bold">Prontuários IA</TabsTrigger>
+          <TabsTrigger value="billing" className="rounded-lg px-6 data-[state=active]:bg-primary data-[state=active]:text-white font-bold">Faturamento</TabsTrigger>
         </TabsList>
         
         <TabsContent value="appointments">
@@ -305,18 +324,21 @@ export default function AdminDashboard() {
         <TabsContent value="billing">
            <Card className="border-none shadow-xl bg-gradient-to-br from-card to-primary/5">
             <CardHeader className="border-b">
-              <CardTitle className="font-headline flex items-center gap-2 text-2xl text-primary">
+              <CardTitle className="font-headline flex items-center gap-2 text-2xl text-primary font-bold">
                 <Sparkles className="text-accent animate-pulse" /> Faturamento IA
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-6">
                <div className="bg-white/80 p-6 rounded-3xl border shadow-sm backdrop-blur-sm">
                   <h4 className="font-bold text-lg mb-2 flex items-center gap-2 text-primary">
-                    <MessageSquare className="w-5 h-5" /> Automação Financeira
+                    <MessageSquare className="w-5 h-5" /> Automação Financeira Ativa
                   </h4>
                   <p className="text-sm text-muted-foreground leading-relaxed">
-                    O sistema gera relatórios financeiros automáticos baseados nos procedimentos registrados nos prontuários.
+                    Olá administrador <strong>{user.email}</strong>, o sistema está configurado para gerar relatórios financeiros automáticos baseados nos procedimentos registrados.
                   </p>
+                  <Button variant="outline" className="mt-4 rounded-full border-primary text-primary hover:bg-primary/5 font-bold">
+                    Gerar Relatório Consolidado
+                  </Button>
                </div>
             </CardContent>
            </Card>
