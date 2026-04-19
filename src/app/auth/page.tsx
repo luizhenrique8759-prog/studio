@@ -12,8 +12,6 @@ import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast";
 import { useState } from 'react';
 
-const HARDCODED_ADMIN_EMAIL = "luizhenrique8759@gmail.com";
-
 export default function AuthPage() {
   const router = useRouter();
   const auth = useAuth();
@@ -33,60 +31,43 @@ export default function AuthPage() {
       const userRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userRef);
       
-      let currentRole = 'patient';
-      let currentLevel = 0;
-
-      // Forçar status de admin mestre se for o e-mail hardcoded
-      if (user.email === HARDCODED_ADMIN_EMAIL) {
-        currentRole = 'admin';
-        currentLevel = 4;
-      }
-
       if (!userSnap.exists()) {
         const newUserData = {
           id: user.uid,
           name: user.displayName || 'Usuário',
           email: user.email,
-          role: currentRole,
-          authorityLevel: currentLevel,
+          role: 'patient',
+          authorityLevel: 0,
           photoURL: user.photoURL,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
         await setDoc(userRef, newUserData);
+        toast({ title: "Bem-vindo!", description: "Sua conta foi criada com sucesso." });
+        router.push('/dashboard');
       } else {
         const existingData = userSnap.data();
-        // Preservar role/level se não for o mestre, ou forçar se for o mestre
-        const finalRole = user.email === HARDCODED_ADMIN_EMAIL ? 'admin' : existingData.role;
-        const finalLevel = user.email === HARDCODED_ADMIN_EMAIL ? 4 : (existingData.authorityLevel || 0);
-
         await updateDoc(userRef, {
           name: user.displayName || existingData.name,
           photoURL: user.photoURL || existingData.photoURL,
-          role: finalRole,
-          authorityLevel: finalLevel,
           updatedAt: new Date().toISOString(),
         });
         
-        currentRole = finalRole;
-      }
-
-      toast({
-        title: user.email === HARDCODED_ADMIN_EMAIL ? "Acesso Master" : "Acesso Autorizado",
-        description: `Bem-vindo, ${user.displayName}!`,
-      });
-
-      if (user.email === HARDCODED_ADMIN_EMAIL || currentRole === 'professional' || currentRole === 'admin') {
-        router.push('/admin');
-      } else {
-        router.push('/dashboard');
+        toast({ title: "Login realizado", description: `Bem-vindo de volta, ${user.displayName}!` });
+        
+        // Redirecionamento baseado no nível de autoridade real do banco
+        if (existingData.authorityLevel >= 1) {
+          router.push('/admin');
+        } else {
+          router.push('/dashboard');
+        }
       }
     } catch (error: any) {
       console.error(error);
       toast({
         variant: "destructive",
         title: "Falha na Autenticação",
-        description: "Acesse com sua conta Google sincronizada.",
+        description: "Ocorreu um erro ao tentar entrar.",
       });
       setIsLoggingIn(false);
     }
@@ -123,14 +104,9 @@ export default function AuthPage() {
             </Button>
             <div className="flex items-center gap-2 justify-center py-2 bg-slate-50 rounded-xl border border-dashed">
               <Shield className="h-4 w-4 text-primary" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Proteção de Dados Ativa</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Segurança Biométrica Digital</span>
             </div>
           </CardContent>
-          <CardFooter className="bg-slate-50/50 p-8">
-            <p className="text-center w-full text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 leading-relaxed">
-              Administrador: <span className="text-primary">{HARDCODED_ADMIN_EMAIL}</span>
-            </p>
-          </CardFooter>
         </Card>
       </div>
     </div>

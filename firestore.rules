@@ -3,58 +3,50 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Função para verificar se é o administrador mestre pelo e-mail do token
-    function isMasterAdmin() {
-      return request.auth != null && request.auth.token.email == "luizhenrique8759@gmail.com";
-    }
-
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Busca autoridade do usuário logado (usado para colaboradores)
+    // Busca autoridade do usuário logado de forma segura
     function getAuthority() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.authorityLevel;
     }
 
-    // Regra Global Master Admin: Acesso total e absoluto
-    match /{document=**} {
-      allow read, write: if isMasterAdmin();
-    }
-
-    // Usuários
+    // Usuários: Próprio usuário ou Administradores (Nível 3+)
     match /users/{userId} {
       allow get: if isSignedIn();
-      allow list: if isSignedIn() && (isMasterAdmin() || getAuthority() >= 3);
-      allow create, update: if isSignedIn() && (request.auth.uid == userId || isMasterAdmin());
+      allow list: if isSignedIn() && getAuthority() >= 3;
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && (request.auth.uid == userId || getAuthority() >= 3);
     }
 
     // Agendamentos (Appointments)
     match /appointments/{apptId} {
-      // Permitir listagem total para Master Admin ou Colaboradores Nível 1+
-      // Pacientes só podem listar se usarem o filtro de patientId no código
+      // Regra de listagem: Colaboradores (1+) ou se for o dono (paciente)
+      // O Firestore exige que a consulta no código tenha o filtro 'where patientId == uid' para pacientes
       allow list: if isSignedIn() && (
-        isMasterAdmin() || 
         getAuthority() >= 1 || 
-        (resource != null && resource.data.patientId == request.auth.uid)
+        resource.data.patientId == request.auth.uid
       );
       
       allow get: if isSignedIn() && (
-        isMasterAdmin() || 
         getAuthority() >= 1 || 
-        (resource != null && resource.data.patientId == request.auth.uid)
+        resource.data.patientId == request.auth.uid
       );
       
       allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && (isMasterAdmin() || getAuthority() >= 1);
+      allow update, delete: if isSignedIn() && (getAuthority() >= 1 || resource.data.patientId == request.auth.uid);
     }
 
-    // Prontuários Médicos
+    // Prontuários Médicos: Apenas Nível 2 (Assistente/Dentista) e acima
     match /medical_records/{recordId} {
-      allow read, write: if isSignedIn() && (isMasterAdmin() || getAuthority() >= 2);
+      allow read, write: if isSignedIn() && getAuthority() >= 2;
     }
 
-    // Serviços e Coleções Gerais
-    match /services/{id} { allow read: if true; allow write: if isMasterAdmin(); }
+    // Serviços: Público para leitura, Administrador (3+) para escrita
+    match /services/{id} { 
+      allow read: if true; 
+      allow write: if isSignedIn() && getAuthority() >= 3; 
+    }
   }
 }

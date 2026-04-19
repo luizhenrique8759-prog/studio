@@ -5,18 +5,15 @@ import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import { 
   Star, 
-  ShieldCheck, 
   Stethoscope, 
   Activity, 
   Shield, 
   Loader2,
-  Calendar,
-  ArrowRight
+  ArrowRight,
+  ShieldCheck
 } from "lucide-react";
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
-
-const HARDCODED_ADMIN_EMAIL = "luizhenrique8759@gmail.com";
 
 export default function LandingPage() {
   const { user, isUserLoading } = useUser();
@@ -29,9 +26,8 @@ export default function LandingPage() {
 
   const { data: userData, isLoading: isLoadingDoc } = useDoc(userDocRef);
 
-  const isAdmin = user?.email === HARDCODED_ADMIN_EMAIL;
   const authorityLevel = userData?.authorityLevel || 0;
-  const hasAuthority = isAdmin || authorityLevel >= 1;
+  const isProfessional = authorityLevel >= 1;
 
   const renderAuthButtons = () => {
     if (isUserLoading || isLoadingDoc) return <Loader2 className="animate-spin h-5 w-5 text-primary" />;
@@ -49,26 +45,16 @@ export default function LandingPage() {
 
     return (
       <div className="flex flex-wrap gap-4 justify-center md:justify-end">
-        {/* TODOS podem acessar sua área de paciente */}
         <Button asChild variant="outline" className="rounded-full px-8 h-12 border-2 font-bold hover:bg-primary/5">
           <Link href="/dashboard" className="flex items-center gap-2">
             <Activity className="h-5 w-5 text-primary" /> Meu Painel de Paciente
           </Link>
         </Button>
 
-        {/* Administradores e Colaboradores veem seu respectivo portal */}
-        {isAdmin && (
+        {isProfessional && (
           <Button asChild className="rounded-full px-8 h-12 bg-primary text-white shadow-xl font-bold">
             <Link href="/admin" className="flex items-center gap-2">
-              <Shield className="h-5 w-5" /> Portal Administrador
-            </Link>
-          </Button>
-        )}
-
-        {!isAdmin && hasAuthority && (
-          <Button asChild className="rounded-full px-8 h-12 bg-accent text-white shadow-xl font-bold">
-            <Link href="/admin" className="flex items-center gap-2">
-              <Stethoscope className="h-5 w-5" /> Portal Colaborador
+              <Shield className="h-5 w-5" /> Portal Profissional
             </Link>
           </Button>
         )}
@@ -92,8 +78,6 @@ export default function LandingPage() {
           
           <nav className="hidden md:flex gap-10 items-center">
             <Link className="text-xs font-black uppercase tracking-widest hover:text-primary transition-colors" href="#services">Serviços</Link>
-            <Link className="text-xs font-black uppercase tracking-widest hover:text-primary transition-colors" href="#features">Tecnologia</Link>
-            <div className="h-8 w-px bg-border mx-2" />
             {renderAuthButtons()}
           </nav>
 
@@ -117,7 +101,7 @@ export default function LandingPage() {
                     Sincronize seu <span className="text-primary italic">Sorriso</span>.
                   </h1>
                   <p className="max-w-[600px] text-muted-foreground text-xl md:text-2xl font-medium leading-relaxed">
-                    Sua saúde bucal gerida por IA e pelos melhores profissionais.
+                    Sua saúde bucal gerida pelos melhores profissionais.
                   </p>
                   <Button asChild size="lg" className="rounded-full px-12 h-16 text-xl font-bold shadow-2xl hover:scale-105 transition-all">
                     <Link href="/booking">Agendar Consulta <ArrowRight className="ml-2 h-6 w-6" /></Link>
@@ -146,7 +130,7 @@ export default function LandingPage() {
               {[
                 { title: "Estética Avançada", desc: "Lentes de contato e facetas com planejamento digital.", icon: Star },
                 { title: "Invisalign", desc: "Alinhadores invisíveis para correção ortodôntica discreta.", icon: ShieldCheck },
-                { title: "Implantes de Carga Imediata", desc: "Recupere seu sorriso em tempo recorde.", icon: Stethoscope },
+                { title: "Implantes", desc: "Recupere seu sorriso em tempo recorde.", icon: Stethoscope },
               ].map((s, i) => (
                 <div key={i} className="group p-10 bg-white rounded-[3rem] border-2 border-transparent hover:border-primary/20 hover:shadow-2xl transition-all">
                   <div className="h-16 w-16 bg-primary/5 rounded-2xl flex items-center justify-center mb-6 mx-auto group-hover:bg-primary group-hover:text-white transition-all">

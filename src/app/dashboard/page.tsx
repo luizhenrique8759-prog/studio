@@ -2,11 +2,11 @@
 "use client";
 
 import { useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SERVICES } from "@/lib/mock-data";
-import { Calendar as CalendarIcon, Clock, User, Stethoscope, ChevronRight, Settings, LogOut, Bell, Loader2 } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, User, Stethoscope, ChevronRight, LogOut, Loader2 } from "lucide-react";
 import Link from 'next/link';
 import { useAuth, useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { signOut } from 'firebase/auth';
@@ -14,8 +14,6 @@ import { useRouter } from 'next/navigation';
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { collection, query, where, orderBy } from 'firebase/firestore';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 
 export default function PatientDashboard() {
   const { user, isUserLoading } = useUser();
@@ -24,16 +22,16 @@ export default function PatientDashboard() {
   const router = useRouter();
   const { toast } = useToast();
 
+  // Simplificamos a query para garantir permissões e performance sem depender de múltiplos índices complexos
   const appointmentsQuery = useMemoFirebase(() => {
     if (!db || !user) return null;
     return query(
       collection(db, 'appointments'),
-      where('patientId', '==', user.uid),
-      orderBy('createdAt', 'desc')
+      where('patientId', '==', user.uid)
     );
   }, [db, user]);
 
-  const { data: appointments, isLoading: isLoadingAppointments } = useCollection(appointmentsQuery);
+  const { data: appointments, isLoading: isLoadingAppointments, error } = useCollection(appointmentsQuery);
 
   useEffect(() => {
     if (!isUserLoading && !user) {
@@ -82,8 +80,8 @@ export default function PatientDashboard() {
       <main className="container mx-auto p-4 md:p-8 space-y-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-headline font-bold text-primary tracking-tight">Bem-vindo, {user.displayName || 'Paciente'}!</h1>
-            <p className="text-muted-foreground">{user.email}</p>
+            <h1 className="text-3xl font-headline font-bold text-primary tracking-tight">Painel Pessoal</h1>
+            <p className="text-muted-foreground">{user.displayName || 'Paciente'}</p>
           </div>
           <Button asChild className="rounded-full px-8 shadow-lg">
             <Link href="/booking">Novo Agendamento</Link>
@@ -140,14 +138,11 @@ export default function PatientDashboard() {
           </div>
 
           <div className="space-y-6">
-            <h2 className="text-xl font-headline font-bold">Atalhos</h2>
+            <h2 className="text-xl font-headline font-bold">Documentação</h2>
             <div className="grid gap-3">
-              <Card className="cursor-pointer hover:bg-primary/5 transition-colors border-none shadow-sm">
-                <CardHeader className="p-4">
-                  <CardTitle className="text-sm flex items-center justify-between">
-                    Meu Prontuário <ChevronRight className="w-4 h-4" />
-                  </CardTitle>
-                </CardHeader>
+              <Card className="border-none shadow-sm p-4 bg-muted/20">
+                <p className="text-xs font-bold text-muted-foreground uppercase mb-2">Histórico Clínico</p>
+                <p className="text-sm">Para visualizar seu prontuário detalhado, solicite acesso ao seu dentista durante a consulta.</p>
               </Card>
             </div>
           </div>
