@@ -5,7 +5,7 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "User",
       "type": "object",
-      "description": "Represents a user account with hierarchical authority levels (1: Reception, 2: Clinical, 3: Administrative).",
+      "description": "Represents a user account with hierarchical authority levels.",
       "properties": {
         "id": {
           "type": "string"
@@ -26,8 +26,8 @@
         },
         "authorityLevel": {
           "type": "number",
-          "description": "1: Reception (Agenda), 2: Clinical (Records), 3: Admin (Finance/Team).",
-          "enum": [1, 2, 3]
+          "description": "1: Reception, 2: Assistant, 3: Admin, 4: Dentist.",
+          "enum": [1, 2, 3, 4]
         },
         "createdAt": {
           "type": "string",

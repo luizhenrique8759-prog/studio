@@ -8,7 +8,7 @@ import { Stethoscope, Loader2, Shield } from "lucide-react";
 import Link from 'next/link';
 import { useAuth, useFirestore } from '@/firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast";
 import { useState } from 'react';
 
@@ -30,46 +30,57 @@ export default function AuthPage() {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
-      // Verificar ou criar perfil do usuário
+      // Sincronizar usuário com o Firestore
       const userRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userRef);
       
-      let role = user.email === HARDCODED_ADMIN_EMAIL ? 'admin' : 'patient';
+      let currentRole = 'patient';
+      let currentLevel = 0;
+
+      if (user.email === HARDCODED_ADMIN_EMAIL) {
+        currentRole = 'admin';
+        currentLevel = 4;
+      }
 
       if (!userSnap.exists()) {
-        // Primeiro acesso: Criar perfil
+        // Novo usuário: Criar perfil completo
         const newUserData = {
           id: user.uid,
           name: user.displayName || 'Usuário',
           email: user.email,
-          role: role,
+          role: currentRole,
+          authorityLevel: currentLevel,
           photoURL: user.photoURL,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
         await setDoc(userRef, newUserData);
         
-        // Se for admin, também garantir a role no documento de permissão
+        // Se for admin, garantir role no documento de permissão
         if (user.email === HARDCODED_ADMIN_EMAIL) {
           const roleRef = doc(db, 'app_roles', 'admin', 'users', user.uid);
           await setDoc(roleRef, { active: true, assignedAt: new Date().toISOString() });
         }
       } else {
-        // Se o email é o administrativo, forçar o role admin na memória para o redirecionamento
-        if (user.email === HARDCODED_ADMIN_EMAIL) {
-          role = 'admin';
-        } else {
-          role = userSnap.data().role;
-        }
+        // Usuário existente: Atualizar apenas dados básicos para manter sincronia
+        const existingData = userSnap.data();
+        currentRole = existingData.role;
+        currentLevel = existingData.authorityLevel || 0;
+
+        await updateDoc(userRef, {
+          name: user.displayName || existingData.name,
+          photoURL: user.photoURL || existingData.photoURL,
+          updatedAt: new Date().toISOString(),
+        });
       }
 
       toast({
-        title: user.email === HARDCODED_ADMIN_EMAIL ? "Acesso Administrador Confirmado" : "Acesso Autorizado",
+        title: user.email === HARDCODED_ADMIN_EMAIL ? "Acesso Administrador" : "Acesso Autorizado",
         description: `Bem-vindo, ${user.displayName}!`,
       });
 
-      // Redirecionamento baseado no papel
-      if (user.email === HARDCODED_ADMIN_EMAIL || role === 'professional' || role === 'admin') {
+      // Redirecionamento inteligente
+      if (user.email === HARDCODED_ADMIN_EMAIL || currentRole === 'professional' || currentRole === 'admin') {
         router.push('/admin');
       } else {
         router.push('/dashboard');
@@ -103,7 +114,7 @@ export default function AuthPage() {
               Acesso Seguro
             </h2>
             <p className="text-muted-foreground font-medium">
-              Utilizamos Google Identity para proteção de prontuários.
+              Sincronização automática com seu prontuário e agenda.
             </p>
           </div>
         </div>
@@ -112,7 +123,7 @@ export default function AuthPage() {
           <div className="bg-primary h-2 w-full" />
           <CardHeader className="space-y-2 pt-10 text-center">
             <CardTitle className="text-2xl font-black">Entrar na Clínica</CardTitle>
-            <CardDescription className="font-medium">Contas corporativas ou pessoais Google</CardDescription>
+            <CardDescription className="font-medium">Identidade sincronizada via Google</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-6 p-10">
             <Button 
@@ -149,12 +160,12 @@ export default function AuthPage() {
             </Button>
             <div className="flex items-center gap-2 justify-center py-2 bg-slate-50 rounded-xl border border-dashed">
               <Shield className="h-4 w-4 text-primary" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Conexão 256-bit SSL</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Criptografia em Tempo Real</span>
             </div>
           </CardContent>
           <CardFooter className="bg-slate-50/50 p-8">
             <p className="text-center w-full text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 leading-relaxed px-6">
-              Acesso administrativo para <span className="text-primary">{HARDCODED_ADMIN_EMAIL}</span>
+              Administrador Geral: <span className="text-primary">{HARDCODED_ADMIN_EMAIL}</span>
             </p>
           </CardFooter>
         </Card>

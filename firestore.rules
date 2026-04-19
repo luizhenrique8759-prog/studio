@@ -34,8 +34,7 @@ service cloud.firestore {
     }
 
     match /medical_records/{recordId} {
-      allow get, list, create: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 2);
-      allow update: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 2);
+      allow get, list, create, update: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 2);
     }
 
     match /app_roles/{role}/{userId} {

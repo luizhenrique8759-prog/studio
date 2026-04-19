@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SERVICES, Appointment, TIME_SLOTS } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, CheckCircle2, Calendar as CalendarIcon, Clock, Users, DollarSign, Shield, Stethoscope, Activity } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, CheckCircle2, Calendar as CalendarIcon, Clock, Users, DollarSign, Shield, Stethoscope, Activity, UserCog } from "lucide-react";
 import { generateClinicalSummary } from "@/ai/flows/generate-clinical-summary";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
@@ -32,21 +32,18 @@ export default function AdminDashboard() {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
 
-  // Dados do usuário atual
   const userDocRef = useMemoFirebase(() => {
     if (!user || !db) return null;
     return doc(db, 'users', user.uid);
   }, [db, user]);
   const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
-  // Listagem de todos os usuários
   const usersRef = useMemoFirebase(() => {
     if (!user || !db) return null;
     return collection(db, 'users');
   }, [db, user]);
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
 
-  // Listagem de agendamentos em tempo real
   const apptsQuery = useMemoFirebase(() => {
     if (!db || !user) return null;
     return query(collection(db, 'appointments'), orderBy('date', 'asc'), orderBy('time', 'asc'));
@@ -73,7 +70,9 @@ export default function AdminDashboard() {
   const authorityLevel = userData?.authorityLevel || 0;
   const isProfessional = userData?.role === 'professional' || isAdmin;
 
+  // Hierarquia de Permissões
   const canViewRecords = isAdmin || authorityLevel >= 2;
+  const canUseIA = isAdmin || authorityLevel >= 4; // IA Evolução só para Dentista (4) ou Admin
   const canViewManagement = isAdmin || authorityLevel >= 3;
   const canViewFinance = isAdmin || authorityLevel >= 3;
   const canEditRoles = isAdmin;
@@ -91,8 +90,8 @@ export default function AdminDashboard() {
 
   const handleToggleProfessional = async (targetUser: any, level: string) => {
     if (!db || !isAdmin) return;
-    const newRole = level === "0" ? 'patient' : 'professional';
     const newLevel = parseInt(level);
+    const newRole = newLevel === 0 ? 'patient' : 'professional';
     
     try {
       const userRef = doc(db, 'users', targetUser.id);
@@ -108,7 +107,7 @@ export default function AdminDashboard() {
         await deleteDoc(roleRef);
       }
 
-      toast({ title: "Autoridade Atualizada", description: `${targetUser.name} agora possui Nível ${newLevel}.` });
+      toast({ title: "Autoridade Atualizada", description: `${targetUser.name} agora é Nível ${newLevel}.` });
     } catch (error) {
       toast({ variant: "destructive", title: "Erro ao atualizar" });
     }
@@ -182,10 +181,10 @@ export default function AdminDashboard() {
           </Avatar>
           <div>
             <h1 className="text-4xl font-headline font-bold text-primary tracking-tight">
-              {isAdmin ? 'Portal Administrador' : `Portal do Colaborador (Lvl ${authorityLevel})`}
+              Portal {isAdmin ? 'Administrador' : `Colaborador (Lvl ${authorityLevel})`}
             </h1>
             <p className="text-muted-foreground flex items-center gap-2 font-medium">
-              {isAdmin ? <Shield className="h-4 w-4 text-primary fill-primary/20" /> : <Stethoscope className="h-4 w-4" />} {user.email}
+              {isAdmin ? <Shield className="h-4 w-4 text-primary fill-primary/20" /> : <UserCog className="h-4 w-4" />} {user.email}
             </p>
           </div>
         </div>
@@ -262,7 +261,7 @@ export default function AdminDashboard() {
               <Card className="border-none shadow-2xl rounded-[2rem]">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-3 text-2xl"><Users className="h-6 w-6 text-primary" /> Gestão de Usuários</CardTitle>
-                  <CardDescription>Defina autoridade e controle acessos.</CardDescription>
+                  <CardDescription>Atribua níveis de autoridade para novos colaboradores.</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
@@ -290,8 +289,9 @@ export default function AdminDashboard() {
                             <SelectContent className="rounded-xl">
                               <SelectItem value="0">Paciente</SelectItem>
                               <SelectItem value="1">Lvl 1 - Recepção</SelectItem>
-                              <SelectItem value="2">Lvl 2 - Clínico</SelectItem>
-                              <SelectItem value="3">Lvl 3 - Adm</SelectItem>
+                              <SelectItem value="2">Lvl 2 - Assistente</SelectItem>
+                              <SelectItem value="3">Lvl 3 - Administrativo</SelectItem>
+                              <SelectItem value="4">Lvl 4 - Dentista</SelectItem>
                             </SelectContent>
                           </Select>
                         )}
@@ -303,15 +303,15 @@ export default function AdminDashboard() {
 
               <Card className="border-none shadow-2xl rounded-[2rem] bg-primary text-white">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-3 text-2xl"><ShieldAlert className="h-6 w-6" /> Equipe por Nível</CardTitle>
-                  <CardDescription className="text-white/70">Visualização das permissões ativas.</CardDescription>
+                  <CardTitle className="flex items-center gap-3 text-2xl"><ShieldAlert className="h-6 w-6" /> Equipe Ativa</CardTitle>
+                  <CardDescription className="text-white/70">Visualização de colaboradores por nível.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    {[1, 2, 3].map(lvl => (
+                  <div className="space-y-6">
+                    {[1, 2, 3, 4].map(lvl => (
                       <div key={lvl} className="space-y-2">
                         <p className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-2">
-                          {lvl === 1 ? 'RECEPÇÃO' : lvl === 2 ? 'CLÍNICO' : 'ADMINISTRATIVO'}
+                          {lvl === 1 ? 'RECEPÇÃO' : lvl === 2 ? 'ASSISTENTE' : lvl === 3 ? 'ADMINISTRATIVO' : 'DENTISTA'}
                         </p>
                         {allUsers?.filter(u => u.role === 'professional' && u.authorityLevel === lvl).map(u => (
                           <div key={u.id} className="flex items-center gap-4 p-4 bg-white/10 rounded-2xl backdrop-blur-sm border border-white/20">
@@ -320,7 +320,7 @@ export default function AdminDashboard() {
                             </Avatar>
                             <div>
                               <p className="font-bold">{u.name}</p>
-                              <p className="text-xs opacity-70">Acesso Nível {lvl} Ativo</p>
+                              <p className="text-xs opacity-70">Autoridade Nível {lvl}</p>
                             </div>
                           </div>
                         ))}
@@ -340,7 +340,7 @@ export default function AdminDashboard() {
                 <div className="flex justify-between items-center">
                   <div>
                     <CardTitle className="flex items-center gap-3 text-2xl"><DollarSign className="h-7 w-7 text-primary" /> Painel Financeiro</CardTitle>
-                    <CardDescription>Gestão de faturamento e métricas administrativas.</CardDescription>
+                    <CardDescription>Faturamento consolidado e métricas administrativas.</CardDescription>
                   </div>
                 </div>
               </CardHeader>
@@ -351,11 +351,11 @@ export default function AdminDashboard() {
                     <p className="text-5xl font-black text-primary">R$ {totalBilling.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                   </div>
                   <div className="p-8 bg-muted rounded-[2rem] border flex flex-col items-center text-center">
-                    <p className="text-xs uppercase font-black text-muted-foreground tracking-widest mb-2">Volume de Pacientes</p>
+                    <p className="text-xs uppercase font-black text-muted-foreground tracking-widest mb-2">Total de Atendimentos</p>
                     <p className="text-5xl font-black">{appointments?.length || 0}</p>
                   </div>
                   <div className="p-8 bg-accent/10 rounded-[2rem] border-2 border-accent/20 flex flex-col items-center text-center">
-                    <p className="text-xs uppercase font-black text-accent/60 tracking-widest mb-2">Insumos & Gastos</p>
+                    <p className="text-xs uppercase font-black text-accent/60 tracking-widest mb-2">Insumos & Despesas</p>
                     <div className="flex items-center gap-2">
                        <p className="text-5xl font-black text-accent">R$ 0,00</p>
                     </div>
@@ -399,7 +399,7 @@ export default function AdminDashboard() {
                 <CardHeader className="pb-4">
                   <div className="relative">
                     <Search className="absolute left-4 top-3.5 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Localizar paciente..." className="pl-12 h-12 rounded-2xl bg-muted/30 border-none focus:ring-2 focus:ring-primary/50" value={searchPatient} onChange={(e) => setSearchPatient(e.target.value)} />
+                    <Input placeholder="Buscar paciente..." className="pl-12 h-12 rounded-2xl bg-muted/30 border-none focus:ring-2 focus:ring-primary/50" value={searchPatient} onChange={(e) => setSearchPatient(e.target.value)} />
                   </div>
                 </CardHeader>
                 <CardContent className="flex-1 overflow-y-auto space-y-3 px-4 pb-4">
@@ -429,50 +429,52 @@ export default function AdminDashboard() {
                         <div className="h-12 w-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary"><ClipboardList className="h-6 w-6" /></div>
                         <div>
                           <CardTitle className="text-3xl font-headline">{selectedPatientRecord.name}</CardTitle>
-                          <CardDescription className="font-black uppercase tracking-widest text-[10px] text-primary">Evolução Clínica e Ficha do Paciente</CardDescription>
+                          <CardDescription className="font-black uppercase tracking-widest text-[10px] text-primary">Ficha Clínica do Paciente</CardDescription>
                         </div>
                       </div>
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button className="rounded-full h-12 px-8 bg-primary hover:scale-105 transition-transform"><Plus className="mr-2 h-5 w-5" /> Nova Evolução</Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-[700px] rounded-[2rem]">
-                          <DialogHeader>
-                            <DialogTitle className="text-2xl">Nova Evolução Clínica</DialogTitle>
-                          </DialogHeader>
-                          <div className="space-y-6 py-6">
-                            <Textarea 
-                              placeholder="Descreva aqui as notas clínicas, procedimentos realizados e observações..." 
-                              className="min-h-[250px] rounded-2xl p-6 text-lg border-muted bg-muted/10"
-                              value={newNote}
-                              onChange={(e) => setNewNote(e.target.value)}
-                            />
-                            {aiAnalysis && (
-                              <div className="p-6 bg-accent/5 rounded-3xl border-2 border-accent/20 animate-in slide-in-from-bottom-4">
-                                <p className="text-xs font-black mb-4 uppercase text-accent tracking-widest flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> Análise IA Concluída:</p>
-                                <div className="space-y-4">
-                                  <p className="text-sm leading-relaxed">{aiAnalysis.summary}</p>
-                                  <div className="p-4 bg-white/50 rounded-xl">
-                                    <p className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Tratamento Sugerido:</p>
-                                    <p className="text-xs italic">{aiAnalysis.suggestedTreatment}</p>
+                      {canUseIA && (
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button className="rounded-full h-12 px-8 bg-primary hover:scale-105 transition-transform"><Plus className="mr-2 h-5 w-5" /> Nova Evolução</Button>
+                          </DialogTrigger>
+                          <DialogContent className="sm:max-w-[700px] rounded-[2rem]">
+                            <DialogHeader>
+                              <DialogTitle className="text-2xl">Nova Evolução Clínica (IA)</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-6 py-6">
+                              <Textarea 
+                                placeholder="Descreva o atendimento..." 
+                                className="min-h-[250px] rounded-2xl p-6 text-lg border-muted bg-muted/10"
+                                value={newNote}
+                                onChange={(e) => setNewNote(e.target.value)}
+                              />
+                              {aiAnalysis && (
+                                <div className="p-6 bg-accent/5 rounded-3xl border-2 border-accent/20 animate-in slide-in-from-bottom-4">
+                                  <p className="text-xs font-black mb-4 uppercase text-accent tracking-widest flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> Resumo Profissional:</p>
+                                  <div className="space-y-4">
+                                    <p className="text-sm leading-relaxed">{aiAnalysis.summary}</p>
+                                    <div className="p-4 bg-white/50 rounded-xl">
+                                      <p className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Sugestão de Tratamento:</p>
+                                      <p className="text-xs italic">{aiAnalysis.suggestedTreatment}</p>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            )}
-                          </div>
-                          <DialogFooter className="gap-2">
-                            <Button variant="outline" className="rounded-full h-12" onClick={analyzeClinicalNote} disabled={loading === 'ai-analysis'}>
-                              {loading === 'ai-analysis' ? <Loader2 className="animate-spin mr-2" /> : "Assistente IA"}
-                            </Button>
-                            <Button className="rounded-full h-12 px-10" onClick={() => {toast({title:"Salvo!"}); setNewNote(""); setAiAnalysis(null)}}>Finalizar Evolução</Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
+                              )}
+                            </div>
+                            <DialogFooter className="gap-2">
+                              <Button variant="outline" className="rounded-full h-12" onClick={analyzeClinicalNote} disabled={loading === 'ai-analysis'}>
+                                {loading === 'ai-analysis' ? <Loader2 className="animate-spin mr-2" /> : "Gerar com IA"}
+                              </Button>
+                              <Button className="rounded-full h-12 px-10" onClick={() => {toast({title:"Evolução Salva!"}); setNewNote(""); setAiAnalysis(null)}}>Salvar Ficha</Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      )}
                     </CardHeader>
                     <CardContent className="p-10 flex flex-col items-center justify-center flex-1">
                       <div className="text-center space-y-4 max-w-sm">
                         <div className="mx-auto h-20 w-20 bg-muted/50 rounded-full flex items-center justify-center text-muted-foreground"><Activity className="h-10 w-10" /></div>
-                        <p className="text-muted-foreground text-lg">Histórico clínico e ficha completa carregados.</p>
+                        <p className="text-muted-foreground text-lg">Histórico sincronizado e pronto para consulta.</p>
                       </div>
                     </CardContent>
                   </div>
@@ -533,10 +535,10 @@ export default function AdminDashboard() {
                   time: newTime,
                   status: 'pending'
                 });
-                toast({ title: "Agenda Atualizada!", description: "O paciente será notificado da mudança." });
+                toast({ title: "Consulta Reagendada", description: "O paciente será notificado." });
                 setReschedulingAppointment(null);
               }
-            }}>Confirmar Alteração</Button>
+            }}>Confirmar Reagendamento</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
