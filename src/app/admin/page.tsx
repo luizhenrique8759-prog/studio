@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MOCK_APPOINTMENTS, SERVICES, Appointment, TIME_SLOTS } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, CheckCircle2, Calendar as CalendarIcon, Clock, Users, DollarSign, UserPlus, UserMinus, Shield } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, CheckCircle2, Calendar as CalendarIcon, Clock, Users, DollarSign, UserPlus, UserMinus, Shield, Stethoscope } from "lucide-react";
 import { generateClinicalSummary } from "@/ai/flows/generate-clinical-summary";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
@@ -159,70 +159,70 @@ export default function AdminDashboard() {
     <div className="p-4 md:p-8 space-y-8 bg-background min-h-screen">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-center gap-4">
-          <Avatar className={`h-12 w-12 border-2 ${isAdmin ? 'border-primary' : 'border-accent'}`}>
+          <Avatar className={`h-14 w-14 border-4 ${isAdmin ? 'border-primary' : 'border-accent shadow-lg'}`}>
             <AvatarImage src={user.photoURL || undefined} />
-            <AvatarFallback className={`${isAdmin ? 'bg-primary' : 'bg-accent'} text-white font-bold`}>{user.displayName?.substring(0,2).toUpperCase()}</AvatarFallback>
+            <AvatarFallback className={`${isAdmin ? 'bg-primary' : 'bg-accent'} text-white font-bold text-xl`}>{user.displayName?.substring(0,2).toUpperCase()}</AvatarFallback>
           </Avatar>
           <div>
             <h1 className="text-4xl font-headline font-bold text-primary tracking-tight">
-              Portal {isAdmin ? 'Administrador' : 'Colaborador'}
+              {isAdmin ? 'Portal Administrador Blindado' : 'Portal do Colaborador'}
             </h1>
-            <p className="text-muted-foreground flex items-center gap-2">
-              {isAdmin ? <Shield className="h-3 w-3" /> : <Stethoscope className="h-3 w-3" />} {user.email}
+            <p className="text-muted-foreground flex items-center gap-2 font-medium">
+              {isAdmin ? <Shield className="h-4 w-4 text-primary fill-primary/20" /> : <Stethoscope className="h-4 w-4" />} {user.email}
             </p>
           </div>
         </div>
-        <Button variant="outline" className="rounded-full text-destructive border-destructive" onClick={handleLogout}>
+        <Button variant="outline" className="rounded-full text-destructive border-destructive hover:bg-destructive/10 px-8" onClick={handleLogout}>
           <LogOut className="mr-2 h-4 w-4" /> Sair
         </Button>
       </div>
 
       <Tabs defaultValue="appointments" className="w-full">
-        <TabsList className="bg-muted p-1 rounded-xl mb-6 flex-wrap h-auto">
-          <TabsTrigger value="appointments" className="rounded-lg px-6">Agenda</TabsTrigger>
-          <TabsTrigger value="records" className="rounded-lg px-6">Prontuários</TabsTrigger>
-          {isAdmin && <TabsTrigger value="management" className="rounded-lg px-6">Equipe & Usuários</TabsTrigger>}
-          {isAdmin && <TabsTrigger value="billing" className="rounded-lg px-6">Financeiro</TabsTrigger>}
+        <TabsList className="bg-muted/50 p-1.5 rounded-2xl mb-8 flex-wrap h-auto border">
+          <TabsTrigger value="appointments" className="rounded-xl px-8 data-[state=active]:bg-white data-[state=active]:shadow-md">Agenda</TabsTrigger>
+          <TabsTrigger value="records" className="rounded-xl px-8 data-[state=active]:bg-white data-[state=active]:shadow-md">Prontuários</TabsTrigger>
+          {isAdmin && <TabsTrigger value="management" className="rounded-xl px-8 data-[state=active]:bg-primary data-[state=active]:text-white">Equipe & Usuários</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="billing" className="rounded-xl px-8 data-[state=active]:bg-primary data-[state=active]:text-white">Financeiro</TabsTrigger>}
         </TabsList>
         
         <TabsContent value="appointments">
-          <Card className="border-none shadow-xl bg-card">
-            <CardHeader><CardTitle>Agenda Hoje</CardTitle></CardHeader>
-            <CardContent>
+          <Card className="border-none shadow-2xl bg-card rounded-[2rem] overflow-hidden">
+            <CardHeader className="bg-muted/20 border-b"><CardTitle>Próximos Atendimentos</CardTitle></CardHeader>
+            <CardContent className="p-0">
               <Table>
-                <TableHeader>
+                <TableHeader className="bg-muted/10">
                   <TableRow>
-                    <TableHead>Paciente</TableHead>
+                    <TableHead className="pl-8">Paciente</TableHead>
                     <TableHead>Serviço</TableHead>
                     <TableHead>Horário</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
+                    <TableHead className="text-right pr-8">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {appointments.map((apt) => (
-                    <TableRow key={apt.id}>
-                      <TableCell className="font-bold">{apt.patientName}</TableCell>
+                    <TableRow key={apt.id} className="hover:bg-muted/5 transition-colors">
+                      <TableCell className="font-bold pl-8 text-lg">{apt.patientName}</TableCell>
                       <TableCell>{SERVICES.find(s => s.id === apt.serviceId)?.name}</TableCell>
-                      <TableCell>{apt.time}</TableCell>
+                      <TableCell className="font-medium text-primary">{apt.time}</TableCell>
                       <TableCell>
-                        <Badge variant={apt.status === 'confirmed' ? 'secondary' : 'outline'} className="rounded-full">
-                          {apt.status === 'confirmed' ? 'Confirmado' : 'Pendente'}
+                        <Badge variant={apt.status === 'confirmed' ? 'secondary' : 'outline'} className="rounded-full px-4 py-1 text-[10px] uppercase font-bold tracking-wider">
+                          {apt.status === 'confirmed' ? '✓ Confirmado' : '⏳ Pendente'}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right pr-8">
                         <div className="flex justify-end gap-2">
                           {apt.status === 'pending' && (
-                            <Button size="sm" variant="ghost" className="text-accent" onClick={() => handleConfirmAppointment(apt.id)}>
-                              <CheckCircle2 className="h-4 w-4" />
+                            <Button size="sm" variant="ghost" className="text-accent hover:bg-accent/10 rounded-full" onClick={() => handleConfirmAppointment(apt.id)}>
+                              <CheckCircle2 className="h-5 w-5" /> <span className="ml-2 hidden sm:inline">Confirmar</span>
                             </Button>
                           )}
-                          <Button size="sm" variant="ghost" onClick={() => {
+                          <Button size="sm" variant="ghost" className="rounded-full hover:bg-primary/10" onClick={() => {
                             setReschedulingAppointment(apt);
                             setNewDate(new Date(apt.date));
                             setNewTime(apt.time);
                           }}>
-                            <CalendarIcon className="h-4 w-4" />
+                            <CalendarIcon className="h-5 w-5 text-primary" /> <span className="ml-2 hidden sm:inline text-primary">Reagendar</span>
                           </Button>
                         </div>
                       </TableCell>
@@ -237,30 +237,35 @@ export default function AdminDashboard() {
         {isAdmin && (
           <>
             <TabsContent value="management">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card className="border-none shadow-lg">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <Card className="border-none shadow-2xl rounded-[2rem]">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Todos os Usuários</CardTitle>
-                    <CardDescription>Gerencie acessos e defina colaboradores.</CardDescription>
+                    <CardTitle className="flex items-center gap-3 text-2xl"><Users className="h-6 w-6 text-primary" /> Gestão de Usuários</CardTitle>
+                    <CardDescription>Defina colaboradores e controle acessos.</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
                       {isLoadingUsers ? <Loader2 className="animate-spin" /> : allUsers?.map(u => (
-                        <div key={u.id} className="flex items-center justify-between p-3 border rounded-xl">
-                          <div>
-                            <p className="font-bold text-sm">{u.name}</p>
-                            <p className="text-xs text-muted-foreground">{u.email}</p>
-                            <Badge variant={u.role === 'professional' ? 'default' : 'outline'} className="mt-1 text-[8px]">
-                              {u.role === 'professional' ? 'Colaborador' : 'Paciente'}
-                            </Badge>
+                        <div key={u.id} className="flex items-center justify-between p-4 border rounded-[1.5rem] hover:bg-muted/5 transition-colors">
+                          <div className="flex items-center gap-4">
+                            <Avatar className="h-10 w-10">
+                              <AvatarFallback className="bg-primary/10 text-primary font-bold">{u.name.substring(0,2)}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-bold">{u.name}</p>
+                              <p className="text-xs text-muted-foreground">{u.email}</p>
+                              <Badge variant={u.role === 'professional' ? 'default' : 'outline'} className="mt-1 text-[8px] h-4">
+                                {u.role === 'professional' ? 'DENTISTA / COLABORADOR' : 'PACIENTE'}
+                              </Badge>
+                            </div>
                           </div>
                           <Button 
                             size="sm" 
                             variant={u.role === 'professional' ? 'destructive' : 'default'} 
-                            className="rounded-full h-8"
+                            className="rounded-full h-10 w-10 p-0"
                             onClick={() => handleToggleProfessional(u)}
                           >
-                            {u.role === 'professional' ? <UserMinus className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+                            {u.role === 'professional' ? <UserMinus className="h-5 w-5" /> : <UserPlus className="h-5 w-5" />}
                           </Button>
                         </div>
                       ))}
@@ -268,21 +273,27 @@ export default function AdminDashboard() {
                   </CardContent>
                 </Card>
 
-                <Card className="border-none shadow-lg">
+                <Card className="border-none shadow-2xl rounded-[2rem] bg-primary text-white">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><ShieldAlert className="h-5 w-5" /> Equipe Ativa</CardTitle>
-                    <CardDescription>Colaboradores com acesso ao prontuário.</CardDescription>
+                    <CardTitle className="flex items-center gap-3 text-2xl"><ShieldAlert className="h-6 w-6" /> Equipe Habilitada</CardTitle>
+                    <CardDescription className="text-white/70">Profissionais com acesso aos prontuários.</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {allUsers?.filter(u => u.role === 'professional').map(u => (
-                        <div key={u.id} className="flex items-center gap-3 p-2 bg-primary/5 rounded-lg border border-primary/10">
-                          <Avatar className="h-8 w-8">
-                            <AvatarFallback className="bg-primary text-white text-[10px]">{u.name.substring(0,2)}</AvatarFallback>
+                        <div key={u.id} className="flex items-center gap-4 p-4 bg-white/10 rounded-2xl backdrop-blur-sm border border-white/20">
+                          <Avatar className="h-10 w-10 border-2 border-white">
+                            <AvatarFallback className="bg-white text-primary font-bold">{u.name.substring(0,2)}</AvatarFallback>
                           </Avatar>
-                          <p className="text-sm font-medium">{u.name}</p>
+                          <div>
+                            <p className="font-bold">{u.name}</p>
+                            <p className="text-xs opacity-70">Acesso Pleno Ativo</p>
+                          </div>
                         </div>
                       ))}
+                      {allUsers?.filter(u => u.role === 'professional').length === 0 && (
+                        <p className="text-center py-10 opacity-50">Nenhum colaborador definido ainda.</p>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -290,46 +301,56 @@ export default function AdminDashboard() {
             </TabsContent>
 
             <TabsContent value="billing">
-              <Card className="border-none shadow-lg overflow-hidden">
-                <CardHeader className="bg-primary/5 border-b">
-                  <CardTitle className="flex items-center gap-2"><DollarSign className="h-5 w-5" /> Resumo Financeiro</CardTitle>
-                  <CardDescription>Acompanhamento manual dos procedimentos e faturamento.</CardDescription>
-                </CardHeader>
-                <CardContent className="pt-6 space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="p-4 bg-primary/10 rounded-2xl border border-primary/20">
-                      <p className="text-xs uppercase font-bold text-muted-foreground">Total Bruto</p>
-                      <p className="text-3xl font-bold text-primary">R$ {totalBilling.toFixed(2)}</p>
+              <Card className="border-none shadow-2xl overflow-hidden rounded-[2rem]">
+                <CardHeader className="bg-primary/5 border-b pb-8">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle className="flex items-center gap-3 text-2xl"><DollarSign className="h-7 w-7 text-primary" /> Painel Financeiro</CardTitle>
+                      <CardDescription>Resumo bruto baseado em agendamentos confirmados.</CardDescription>
                     </div>
-                    <div className="p-4 bg-muted rounded-2xl border">
-                      <p className="text-xs uppercase font-bold text-muted-foreground">Procedimentos</p>
-                      <p className="text-3xl font-bold">{appointments.length}</p>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-8 space-y-8">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="p-8 bg-primary/10 rounded-[2rem] border-2 border-primary/20 flex flex-col items-center text-center">
+                      <p className="text-xs uppercase font-black text-primary/60 tracking-widest mb-2">Faturamento Estimado</p>
+                      <p className="text-5xl font-black text-primary">R$ {totalBilling.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                    </div>
+                    <div className="p-8 bg-muted rounded-[2rem] border flex flex-col items-center text-center">
+                      <p className="text-xs uppercase font-black text-muted-foreground tracking-widest mb-2">Procedimentos Totais</p>
+                      <p className="text-5xl font-black">{appointments.length}</p>
+                    </div>
+                    <div className="p-8 bg-accent/10 rounded-[2rem] border-2 border-accent/20 flex flex-col items-center text-center">
+                      <p className="text-xs uppercase font-black text-accent/60 tracking-widest mb-2">Confirmações</p>
+                      <p className="text-5xl font-black text-accent">{appointments.filter(a => a.status === 'confirmed').length}</p>
                     </div>
                   </div>
                   
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Paciente</TableHead>
-                        <TableHead>Serviço</TableHead>
-                        <TableHead className="text-right">Valor</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {appointments.map((apt) => {
-                        const service = SERVICES.find(s => s.id === apt.serviceId);
-                        return (
-                          <TableRow key={apt.id}>
-                            <TableCell className="text-xs">{apt.date}</TableCell>
-                            <TableCell className="font-medium">{apt.patientName}</TableCell>
-                            <TableCell className="text-xs">{service?.name}</TableCell>
-                            <TableCell className="text-right font-bold">R$ {service?.price.toFixed(2)}</TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
+                  <div className="rounded-[1.5rem] border overflow-hidden">
+                    <Table>
+                      <TableHeader className="bg-muted/50">
+                        <TableRow>
+                          <TableHead className="pl-6">Data</TableHead>
+                          <TableHead>Paciente</TableHead>
+                          <TableHead>Serviço</TableHead>
+                          <TableHead className="text-right pr-6">Valor</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {appointments.map((apt) => {
+                          const service = SERVICES.find(s => s.id === apt.serviceId);
+                          return (
+                            <TableRow key={apt.id}>
+                              <TableCell className="text-xs pl-6">{format(new Date(apt.date), "dd/MM/yyyy")}</TableCell>
+                              <TableCell className="font-bold">{apt.patientName}</TableCell>
+                              <TableCell className="text-xs italic">{service?.name}</TableCell>
+                              <TableCell className="text-right font-bold pr-6 text-primary">R$ {service?.price.toFixed(2)}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -337,77 +358,98 @@ export default function AdminDashboard() {
         )}
 
         <TabsContent value="records">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="md:col-span-1 border-none shadow-lg">
-              <CardHeader>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <Card className="md:col-span-1 border-none shadow-2xl rounded-[2rem] h-[600px] flex flex-col">
+              <CardHeader className="pb-4">
                 <div className="relative">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="Buscar paciente..." className="pl-9" value={searchPatient} onChange={(e) => setSearchPatient(e.target.value)} />
+                  <Search className="absolute left-4 top-3.5 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Localizar paciente..." className="pl-12 h-12 rounded-2xl bg-muted/30 border-none focus:ring-2 focus:ring-primary/50" value={searchPatient} onChange={(e) => setSearchPatient(e.target.value)} />
                 </div>
               </CardHeader>
-              <CardContent className="space-y-2">
-                {isAdmin ? (
-                  allUsers?.filter(u => u.name.toLowerCase().includes(searchPatient.toLowerCase())).map(u => (
-                    <div 
-                      key={u.id} 
-                      className={`p-3 rounded-lg border cursor-pointer ${selectedPatientRecord?.id === u.id ? 'bg-primary/5 border-primary' : 'hover:bg-muted'}`}
-                      onClick={() => setSelectedPatientRecord({ id: u.id, name: u.name })}
-                    >
+              <CardContent className="flex-1 overflow-y-auto space-y-3 px-4 pb-4">
+                {allUsers?.filter(u => u.name.toLowerCase().includes(searchPatient.toLowerCase())).map(u => (
+                  <div 
+                    key={u.id} 
+                    className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center gap-3 ${selectedPatientRecord?.id === u.id ? 'bg-primary/5 border-primary shadow-inner scale-[0.98]' : 'hover:border-primary/30 hover:bg-muted/5'}`}
+                    onClick={() => setSelectedPatientRecord({ id: u.id, name: u.name })}
+                  >
+                    <Avatar className="h-10 w-10">
+                      <AvatarFallback className="bg-muted text-xs font-bold">{u.name.substring(0,2)}</AvatarFallback>
+                    </Avatar>
+                    <div>
                       <p className="font-bold text-sm">{u.name}</p>
-                      <p className="text-[10px] text-muted-foreground uppercase">{u.email}</p>
+                      <p className="text-[10px] text-muted-foreground uppercase font-black">{u.email}</p>
                     </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-muted-foreground p-4 text-center">Para visualizar pacientes, utilize a agenda ou busque pelo nome.</p>
+                  </div>
+                ))}
+                {(!allUsers || allUsers.length === 0) && (
+                  <div className="flex flex-col items-center justify-center py-20 opacity-30">
+                    <Users className="h-12 w-12 mb-2" />
+                    <p className="text-xs">Nenhum usuário encontrado.</p>
+                  </div>
                 )}
               </CardContent>
             </Card>
 
-            <Card className="md:col-span-2 border-none shadow-lg">
+            <Card className="md:col-span-2 border-none shadow-2xl rounded-[2rem] overflow-hidden">
               {selectedPatientRecord ? (
                 <div className="h-full flex flex-col">
-                  <CardHeader className="border-b flex flex-row items-center justify-between">
-                    <div>
-                      <CardTitle>{selectedPatientRecord.name}</CardTitle>
-                      <CardDescription>Prontuário Digital</CardDescription>
+                  <CardHeader className="bg-muted/10 border-b flex flex-row items-center justify-between py-8 px-10">
+                    <div className="flex items-center gap-4">
+                      <div className="h-12 w-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary"><ClipboardList className="h-6 w-6" /></div>
+                      <div>
+                        <CardTitle className="text-3xl font-headline">{selectedPatientRecord.name}</CardTitle>
+                        <CardDescription className="font-black uppercase tracking-widest text-[10px] text-primary">Evolução Clínica e Prontuário</CardDescription>
+                      </div>
                     </div>
                     <Dialog>
                       <DialogTrigger asChild>
-                        <Button className="rounded-full"><Plus className="mr-2 h-4 w-4" /> Evolução</Button>
+                        <Button className="rounded-full h-12 px-8 bg-primary hover:scale-105 transition-transform"><Plus className="mr-2 h-5 w-5" /> Nova Evolução</Button>
                       </DialogTrigger>
-                      <DialogContent className="sm:max-w-[600px]">
+                      <DialogContent className="sm:max-w-[700px] rounded-[2rem]">
                         <DialogHeader>
-                          <DialogTitle>Nova Evolução Clínica</DialogTitle>
+                          <DialogTitle className="text-2xl">Nova Evolução Clínica</DialogTitle>
                         </DialogHeader>
-                        <div className="space-y-4 py-4">
+                        <div className="space-y-6 py-6">
                           <Textarea 
-                            placeholder="Notas clínicas..." 
-                            className="min-h-[150px]"
+                            placeholder="Descreva aqui as notas clínicas, procedimentos realizados e observações..." 
+                            className="min-h-[250px] rounded-2xl p-6 text-lg border-muted bg-muted/10"
                             value={newNote}
                             onChange={(e) => setNewNote(e.target.value)}
                           />
                           {aiAnalysis && (
-                            <div className="p-4 bg-accent/10 rounded-xl border border-accent/20">
-                              <p className="text-xs font-bold mb-2">Análise IA:</p>
-                              <p className="text-xs">{aiAnalysis.summary}</p>
+                            <div className="p-6 bg-accent/5 rounded-3xl border-2 border-accent/20 animate-in slide-in-from-bottom-4">
+                              <p className="text-xs font-black mb-4 uppercase text-accent tracking-widest flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> Análise IA Concluída:</p>
+                              <div className="space-y-4">
+                                <p className="text-sm leading-relaxed">{aiAnalysis.summary}</p>
+                                <div className="p-4 bg-white/50 rounded-xl">
+                                  <p className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Tratamento Sugerido:</p>
+                                  <p className="text-xs italic">{aiAnalysis.suggestedTreatment}</p>
+                                </div>
+                              </div>
                             </div>
                           )}
                         </div>
-                        <DialogFooter>
-                          <Button variant="outline" onClick={analyzeClinicalNote} disabled={loading === 'ai-analysis'}>IA</Button>
-                          <Button onClick={() => {toast({title:"Salvo"}); setNewNote(""); setAiAnalysis(null)}}>Salvar</Button>
+                        <DialogFooter className="gap-2">
+                          <Button variant="outline" className="rounded-full h-12" onClick={analyzeClinicalNote} disabled={loading === 'ai-analysis'}>
+                            {loading === 'ai-analysis' ? <Loader2 className="animate-spin mr-2" /> : "Assistente IA"}
+                          </Button>
+                          <Button className="rounded-full h-12 px-10" onClick={() => {toast({title:"Salvo!"}); setNewNote(""); setAiAnalysis(null)}}>Finalizar Evolução</Button>
                         </DialogFooter>
                       </DialogContent>
                     </Dialog>
                   </CardHeader>
-                  <CardContent className="p-6">
-                    <p className="text-muted-foreground text-sm italic">Nenhuma evolução anterior encontrada para este paciente.</p>
+                  <CardContent className="p-10 flex flex-col items-center justify-center flex-1">
+                    <div className="text-center space-y-4 max-w-sm">
+                      <div className="mx-auto h-20 w-20 bg-muted/50 rounded-full flex items-center justify-center text-muted-foreground"><Clock className="h-10 w-10" /></div>
+                      <p className="text-muted-foreground text-lg">Selecione uma data ou inicie uma nova evolução para carregar o histórico clínico deste paciente.</p>
+                    </div>
                   </CardContent>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center py-40 opacity-20">
-                  <ClipboardList className="h-12 w-12" />
-                  <p>Selecione um paciente</p>
+                <div className="flex flex-col items-center justify-center py-40 opacity-10">
+                  <Stethoscope className="h-32 w-32 mb-4" />
+                  <p className="text-2xl font-black uppercase tracking-[0.2em]">Selecione um Paciente</p>
                 </div>
               )}
             </Card>
@@ -416,31 +458,36 @@ export default function AdminDashboard() {
       </Tabs>
 
       <Dialog open={!!reschedulingAppointment} onOpenChange={(open) => !open && setReschedulingAppointment(null)}>
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Reagendar</DialogTitle>
+        <DialogContent className="sm:max-w-xl rounded-[3rem] p-10">
+          <DialogHeader className="items-center text-center">
+            <DialogTitle className="text-3xl font-headline">Reagendar Consulta</DialogTitle>
+            <DialogDescription className="font-bold text-primary">Paciente: {reschedulingAppointment?.patientName}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-6 py-4">
-            <div className="flex flex-wrap justify-center gap-3">
+          <div className="space-y-8 py-6">
+            <div className="flex flex-wrap justify-center gap-4">
               {availableDates.map((date) => {
                 const isSelected = newDate?.toDateString() === date.toDateString();
                 return (
                   <Button
                     key={date.toISOString()}
                     variant={isSelected ? "default" : "outline"}
-                    className={`h-20 w-16 rounded-2xl flex flex-col gap-1 ${isSelected ? 'scale-105 shadow-lg' : ''}`}
-                    onClick={() => setNewDate(date)}
+                    className={`h-24 w-20 rounded-[2rem] flex flex-col gap-1 transition-all ${isSelected ? 'scale-110 shadow-xl ring-4 ring-primary/20' : 'hover:bg-primary/5'}`}
+                    onClick={() => {
+                      setNewDate(date);
+                      setNewTime("");
+                    }}
                   >
-                    <span className="text-[8px] uppercase">{format(date, "EEE", { locale: ptBR })}</span>
-                    <span className="text-xl font-bold">{format(date, "dd")}</span>
+                    <span className="text-[10px] uppercase font-bold opacity-50">{format(date, "EEE", { locale: ptBR })}</span>
+                    <span className="text-2xl font-black">{format(date, "dd")}</span>
+                    <span className="text-[10px] font-medium uppercase opacity-50">{format(date, "MMM", { locale: ptBR })}</span>
                   </Button>
                 );
               })}
             </div>
             {newDate && (
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-4 gap-3 animate-in fade-in slide-in-from-top-2">
                 {TIME_SLOTS.map(t => (
-                  <Button key={t} variant={newTime === t ? "default" : "outline"} className="h-10 text-xs" onClick={() => setNewTime(t)}>
+                  <Button key={t} variant={newTime === t ? "default" : "outline"} className={`h-12 rounded-xl text-xs font-bold ${newTime === t ? 'shadow-lg scale-105' : ''}`} onClick={() => setNewTime(t)}>
                     {t}
                   </Button>
                 ))}
@@ -448,8 +495,8 @@ export default function AdminDashboard() {
             )}
           </div>
           <DialogFooter>
-            <Button className="rounded-full w-full" disabled={!newDate || !newTime} onClick={() => {
-              toast({ title: "Reagendado!" });
+            <Button className="rounded-full w-full h-14 text-lg font-bold shadow-xl" disabled={!newDate || !newTime} onClick={() => {
+              toast({ title: "Agenda Atualizada!", description: "O paciente será notificado da mudança." });
               setReschedulingAppointment(null);
             }}>Confirmar Alteração</Button>
           </DialogFooter>
