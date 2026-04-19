@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MOCK_APPOINTMENTS, SERVICES, PROFESSIONALS, Appointment } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Calendar, Users, DollarSign, FileText, Bell, CheckCircle2, XCircle, Clock, Stethoscope, MessageSquare } from "lucide-react";
+import { Calendar, Users, DollarSign, FileText, Bell, CheckCircle2, XCircle, Clock, Stethoscope, MessageSquare, Sparkles } from "lucide-react";
 import { generateBillingSummary } from "@/ai/flows/generate-billing-summary";
 import { generateAppointmentNotification } from "@/ai/flows/generate-appointment-notification";
 import { useToast } from "@/hooks/use-toast";
@@ -20,13 +20,11 @@ export default function AdminDashboard() {
   const confirmAppointment = async (apt: Appointment) => {
     setLoading(apt.id);
     try {
-      // Logic for confirming
       setAppointments(prev => prev.map(a => a.id === apt.id ? { ...a, status: 'confirmed' } : a));
       
       const prof = PROFESSIONALS.find(p => p.id === apt.professionalId);
       const service = SERVICES.find(s => s.id === apt.serviceId);
 
-      // AI Notification
       const { message } = await generateAppointmentNotification({
         patientName: apt.patientName,
         appointmentDate: apt.date,
