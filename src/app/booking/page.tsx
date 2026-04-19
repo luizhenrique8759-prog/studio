@@ -68,7 +68,7 @@ export default function BookingPage() {
 
   const handleNext = () => setStep(s => s + 1);
   const handleBack = () => {
-    if (step === (isAdmin ? 4 : 3) && confirmedDate) {
+    if (step === (isAdmin ? 5 : 4) && confirmedDate) {
       setConfirmedDate(false);
       return;
     }
@@ -102,7 +102,7 @@ export default function BookingPage() {
       };
 
       await addDoc(collection(db, 'appointments'), appointmentData);
-      setStep(isAdmin ? 6 : 5); 
+      setStep(isAdmin ? 7 : 6); 
     } catch (error) {
       console.error(error);
       toast({
@@ -141,8 +141,8 @@ export default function BookingPage() {
           </Link>
           <div className="hidden md:flex gap-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
             {isAdmin && <span className={step >= 1 ? "text-primary border-b-2 border-primary" : ""}>Paciente</span>}
-            <span className={step >= (isAdmin ? 2 : 1) ? "text-primary border-b-2 border-primary" : ""}>Serviço</span>
-            <span className={step >= (isAdmin ? 3 : 2) ? "text-primary border-b-2 border-primary" : ""}>Dentista</span>
+            <span className={step >= (isAdmin ? 2 : 1) ? "text-primary border-b-2 border-primary" : ""}>Dentista</span>
+            <span className={step >= (isAdmin ? 3 : 2) ? "text-primary border-b-2 border-primary" : ""}>Serviço</span>
             <span className={step >= (isAdmin ? 4 : 3) ? "text-primary border-b-2 border-primary" : ""}>Agenda</span>
             <span className={step >= (isAdmin ? 5 : 4) ? "text-primary border-b-2 border-primary" : ""}>Resumo</span>
           </div>
@@ -203,39 +203,8 @@ export default function BookingPage() {
           </div>
         )}
 
-        {/* Passo de Serviço */}
+        {/* Passo 1 (Paciente) / Passo 2 (Admin): Especialista */}
         {((step === 1 && !isAdmin) || (step === 2 && isAdmin)) && (
-          <div className="grid gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h2 className="text-3xl font-headline font-bold">O que vamos cuidar hoje?</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {SERVICES.map((s) => (
-                <Card 
-                  key={s.id} 
-                  className={`cursor-pointer transition-all border-2 rounded-2xl ${selectedService?.id === s.id ? 'border-primary bg-primary/5' : 'hover:border-primary/50'}`}
-                  onClick={() => setSelectedService(s)}
-                >
-                  <CardHeader>
-                    <CardTitle className="text-lg">{s.name}</CardTitle>
-                    <CardDescription className="line-clamp-2">{s.description}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> {s.duration} min</span>
-                    <span className="text-lg font-bold text-primary">R$ {s.price}</span>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-            <div className="flex justify-between pt-4">
-              {isAdmin && <Button variant="outline" onClick={handleBack} className="rounded-full px-8">Voltar</Button>}
-              <Button disabled={!selectedService} onClick={handleNext} className="ml-auto rounded-full px-10 h-12 shadow-lg">
-                Próximo <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Passo Especialista */}
-        {((step === 2 && !isAdmin) || (step === 3 && isAdmin)) && (
           <div className="grid gap-6 animate-in fade-in slide-in-from-right-4 duration-500">
             <h2 className="text-3xl font-headline font-bold">Com qual especialista?</h2>
             {isLoadingProfs ? (
@@ -267,8 +236,39 @@ export default function BookingPage() {
               </div>
             )}
             <div className="flex justify-between pt-4">
+              {isAdmin && <Button variant="outline" onClick={handleBack} className="rounded-full px-8">Voltar</Button>}
+              <Button disabled={!selectedProfessional} onClick={handleNext} className="ml-auto rounded-full px-10 h-12 shadow-lg">
+                Próximo <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Passo 2 (Paciente) / Passo 3 (Admin): Serviço */}
+        {((step === 2 && !isAdmin) || (step === 3 && isAdmin)) && (
+          <div className="grid gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <h2 className="text-3xl font-headline font-bold">O que vamos cuidar hoje?</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {SERVICES.map((s) => (
+                <Card 
+                  key={s.id} 
+                  className={`cursor-pointer transition-all border-2 rounded-2xl ${selectedService?.id === s.id ? 'border-primary bg-primary/5' : 'hover:border-primary/50'}`}
+                  onClick={() => setSelectedService(s)}
+                >
+                  <CardHeader>
+                    <CardTitle className="text-lg">{s.name}</CardTitle>
+                    <CardDescription className="line-clamp-2">{s.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> {s.duration} min</span>
+                    <span className="text-lg font-bold text-primary">R$ {s.price}</span>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            <div className="flex justify-between pt-4">
               <Button variant="outline" onClick={handleBack} className="rounded-full px-8">Voltar</Button>
-              <Button disabled={!selectedProfessional} onClick={handleNext} className="rounded-full px-10 h-12 shadow-lg">
+              <Button disabled={!selectedService} onClick={handleNext} className="ml-auto rounded-full px-10 h-12 shadow-lg">
                 Próximo <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </div>
@@ -359,17 +359,17 @@ export default function BookingPage() {
               </CardHeader>
               <CardContent className="space-y-6 pt-10 px-10">
                 <div className="flex items-start gap-4">
-                  <div className="p-3 bg-primary/10 rounded-2xl"><Stethoscope className="text-primary w-5 h-5" /></div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Procedimento</p>
-                    <p className="font-bold text-lg">{selectedService?.name}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-4">
                   <div className="p-3 bg-primary/10 rounded-2xl"><User className="text-primary w-5 h-5" /></div>
                   <div>
                     <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Especialista</p>
                     <p className="font-bold text-lg">{selectedProfessional?.name}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-primary/10 rounded-2xl"><Stethoscope className="text-primary w-5 h-5" /></div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Procedimento</p>
+                    <p className="font-bold text-lg">{selectedService?.name}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-4">
