@@ -8,15 +8,38 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MOCK_APPOINTMENTS, SERVICES, PROFESSIONALS, Appointment } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Calendar, Users, DollarSign, FileText, Bell, CheckCircle2, Clock, Stethoscope, MessageSquare, Sparkles } from "lucide-react";
+import { Calendar, Users, DollarSign, FileText, Bell, CheckCircle2, Clock, Stethoscope, MessageSquare, Sparkles, LogOut } from "lucide-react";
 import { generateBillingSummary } from "@/ai/flows/generate-billing-summary";
 import { generateAppointmentNotification } from "@/ai/flows/generate-appointment-notification";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from '@/firebase';
+import { signOut } from 'firebase/auth';
+import { useRouter } from 'next/navigation';
 
 export default function AdminDashboard() {
   const { toast } = useToast();
+  const auth = useAuth();
+  const router = useRouter();
   const [appointments, setAppointments] = useState<Appointment[]>(MOCK_APPOINTMENTS);
   const [loading, setLoading] = useState<string | null>(null);
+
+  const handleLogout = async () => {
+    if (!auth) return;
+    try {
+      await signOut(auth);
+      toast({
+        title: "Sessão administrativa encerrada",
+        description: "Você saiu do painel de controle.",
+      });
+      router.push('/');
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao sair",
+        description: "Não foi possível encerrar a sessão.",
+      });
+    }
+  };
 
   const confirmAppointment = async (apt: Appointment) => {
     setLoading(apt.id);
@@ -26,7 +49,7 @@ export default function AdminDashboard() {
       const prof = PROFESSIONALS.find(p => p.id === apt.professionalId);
       const service = SERVICES.find(s => s.id === apt.serviceId);
 
-      const { message } = await generateAppointmentNotification({
+      await generateAppointmentNotification({
         patientName: apt.patientName,
         appointmentDate: apt.date,
         appointmentTime: apt.time,
@@ -84,6 +107,9 @@ export default function AdminDashboard() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="rounded-full"><Bell className="mr-2 h-4 w-4" /> Notificações</Button>
+          <Button variant="ghost" className="rounded-full text-destructive" onClick={handleLogout}>
+            <LogOut className="mr-2 h-4 w-4" /> Sair
+          </Button>
           <Button className="rounded-full px-6">+ Novo Agendamento</Button>
         </div>
       </div>

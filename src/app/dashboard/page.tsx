@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -7,9 +8,34 @@ import { Badge } from "@/components/ui/badge";
 import { MOCK_APPOINTMENTS, SERVICES, PROFESSIONALS } from "@/lib/mock-data";
 import { Calendar as CalendarIcon, Clock, User, Stethoscope, ChevronRight, Settings, LogOut, Bell } from "lucide-react";
 import Link from 'next/link';
+import { useAuth } from '@/firebase';
+import { signOut } from 'firebase/auth';
+import { useRouter } from 'next/navigation';
+import { useToast } from "@/hooks/use-toast";
 
 export default function PatientDashboard() {
   const [userAppointments] = useState(MOCK_APPOINTMENTS.filter(a => a.patientId === 'u1'));
+  const auth = useAuth();
+  const router = useRouter();
+  const { toast } = useToast();
+
+  const handleLogout = async () => {
+    if (!auth) return;
+    try {
+      await signOut(auth);
+      toast({
+        title: "Sessão encerrada",
+        description: "Você saiu com sucesso.",
+      });
+      router.push('/');
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao sair",
+        description: "Não foi possível encerrar a sessão.",
+      });
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -142,7 +168,13 @@ export default function PatientDashboard() {
 
             <div className="pt-4 border-t flex flex-col gap-2">
                <Button variant="ghost" className="justify-start"><Settings className="mr-2 h-4 w-4" /> Configurações</Button>
-               <Button variant="ghost" className="justify-start text-destructive hover:text-destructive"><LogOut className="mr-2 h-4 w-4" /> Sair</Button>
+               <Button 
+                variant="ghost" 
+                className="justify-start text-destructive hover:text-destructive"
+                onClick={handleLogout}
+               >
+                <LogOut className="mr-2 h-4 w-4" /> Sair
+               </Button>
             </div>
           </div>
         </div>
