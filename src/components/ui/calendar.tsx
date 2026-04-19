@@ -19,12 +19,12 @@ function Calendar({
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
-      className={cn("p-2", className)}
-      disabled={{ dayOfWeek: [0] }} // Desabilita domingos
+      className={cn("p-3", className)}
+      disabled={{ dayOfWeek: [0] }}
       classNames={{
         months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
         month: "space-y-4",
-        caption: "flex justify-center pt-1 relative items-center",
+        caption: "flex justify-center pt-1 relative items-center mb-2",
         caption_label: "text-sm font-medium",
         nav: "space-x-1 flex items-center",
         nav_button: cn(
@@ -34,18 +34,21 @@ function Calendar({
         nav_button_previous: "absolute left-1",
         nav_button_next: "absolute right-1",
         table: "w-full border-collapse space-y-1",
-        head_row: "flex w-full",
+        head_row: "flex",
         head_cell:
-          "text-muted-foreground rounded-md w-8 font-normal text-[0.75rem] flex-1 text-center [&:nth-child(1)]:hidden", // Esconde cabeçalho do domingo
-        row: "flex w-full mt-2 justify-center",
+          "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem] text-center [&:nth-child(1)]:hidden",
+        row: "flex w-full mt-2",
         cell: cn(
-          "h-8 w-8 text-center text-sm p-0 relative flex-1 focus-within:relative focus-within:z-20",
-          "[&:nth-child(1)]:hidden" // Esconde a coluna do domingo
+          "h-9 w-9 text-center text-sm p-0 relative focus-within:relative focus-within:z-20 [&:nth-child(1)]:hidden",
+          props.mode === "range"
+            ? "[&:has(>.day-range-end)]:rounded-r-md [&:has(>.day-range-start)]:rounded-l-md first:[&:has(>text-foreground)]:rounded-l-md last:[&:has(>text-foreground)]:rounded-r-md"
+            : "[&:has([aria-selected])]:rounded-md"
         ),
         day: cn(
           buttonVariants({ variant: "ghost" }),
-          "h-8 w-8 p-0 font-normal aria-selected:opacity-100 flex items-center justify-center mx-auto"
+          "h-9 w-9 p-0 font-normal aria-selected:opacity-100"
         ),
+        day_range_start: "day-range-start",
         day_range_end: "day-range-end",
         day_selected:
           "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",

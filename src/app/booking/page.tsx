@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -9,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { SERVICES, PROFESSIONALS, TIME_SLOTS, Service, Professional } from "@/lib/mock-data";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Check, ChevronLeft, Clock, User, Stethoscope, Sparkles } from "lucide-react";
+import { Check, ChevronLeft, Clock, User, Stethoscope, Calendar as CalendarIcon } from "lucide-react";
 import Link from 'next/link';
 
 export default function BookingPage() {
@@ -17,13 +18,23 @@ export default function BookingPage() {
   const [step, setStep] = useState(1);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedProfessional, setSelectedProfessional] = useState<Professional | null>(null);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [isDateConfirmed, setIsDateConfirmed] = useState(false);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
 
   const handleNext = () => setStep(s => s + 1);
   const handleBack = () => setStep(s => s - 1);
 
-  const isConfirmed = step === 5;
+  const handleDateConfirm = () => {
+    if (selectedDate) {
+      setIsDateConfirmed(true);
+    }
+  };
+
+  const handleResetDate = () => {
+    setIsDateConfirmed(false);
+    setSelectedTime(null);
+  };
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
@@ -35,7 +46,7 @@ export default function BookingPage() {
              </div>
              <span className="text-xl font-headline font-bold text-primary">Dental Sync</span>
           </Link>
-          <div className="flex gap-2 text-sm text-muted-foreground">
+          <div className="hidden md:flex gap-2 text-sm text-muted-foreground">
             <span className={step >= 1 ? "text-primary font-bold" : ""}>Serviço</span>
             <span>•</span>
             <span className={step >= 2 ? "text-primary font-bold" : ""}>Profissional</span>
@@ -103,38 +114,62 @@ export default function BookingPage() {
         {step === 3 && (
           <div className="grid gap-6">
             <h2 className="text-3xl font-headline font-bold">Data e Horário</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <Card className="p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+              <Card className="p-4 flex flex-col items-center">
+                <CardHeader className="w-full text-center">
+                  <CardTitle className="text-lg flex items-center justify-center gap-2">
+                    <CalendarIcon className="w-5 h-5 text-primary" />
+                    Selecione o Dia
+                  </CardTitle>
+                </CardHeader>
                 <Calendar
                   mode="single"
                   selected={selectedDate}
-                  onSelect={setSelectedDate}
-                  className="rounded-md border"
+                  onSelect={(date) => {
+                    setSelectedDate(date);
+                    setIsDateConfirmed(false);
+                  }}
+                  className="rounded-md border mx-auto"
                   locale={ptBR}
                 />
+                {!isDateConfirmed && selectedDate && (
+                  <Button 
+                    onClick={handleDateConfirm} 
+                    className="mt-4 w-full rounded-full bg-accent hover:bg-accent/90"
+                  >
+                    Confirmar Data
+                  </Button>
+                )}
               </Card>
-              <Card className="p-4">
-                <CardHeader>
-                  <CardTitle>Horários Disponíveis</CardTitle>
-                  <CardDescription>Para {selectedDate ? format(selectedDate, "dd 'de' MMMM", { locale: ptBR }) : 'selecione uma data'}</CardDescription>
-                </CardHeader>
-                <CardContent className="grid grid-cols-4 gap-2">
-                  {TIME_SLOTS.map(t => (
-                    <Button 
-                      key={t} 
-                      variant={selectedTime === t ? "default" : "outline"} 
-                      size="sm"
-                      onClick={() => setSelectedTime(t)}
-                    >
-                      {t}
-                    </Button>
-                  ))}
-                </CardContent>
-              </Card>
+
+              {isDateConfirmed && selectedDate && (
+                <Card className="animate-in fade-in slide-in-from-right duration-300 overflow-hidden">
+                  <CardHeader className="bg-muted/50">
+                    <CardTitle className="text-lg">Horários Disponíveis</CardTitle>
+                    <CardDescription>
+                      {format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
+                      <Button variant="link" size="sm" onClick={handleResetDate} className="text-xs p-0 h-auto ml-2">Alterar data</Button>
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-6">
+                    {TIME_SLOTS.map(t => (
+                      <Button 
+                        key={t} 
+                        variant={selectedTime === t ? "default" : "outline"} 
+                        size="sm"
+                        className="rounded-lg"
+                        onClick={() => setSelectedTime(t)}
+                      >
+                        {t}
+                      </Button>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
             </div>
             <div className="flex justify-between">
               <Button variant="outline" onClick={handleBack} className="rounded-full"><ChevronLeft className="mr-2" /> Voltar</Button>
-              <Button disabled={!selectedDate || !selectedTime} onClick={handleNext} className="rounded-full px-8">Próximo</Button>
+              <Button disabled={!isDateConfirmed || !selectedTime} onClick={handleNext} className="rounded-full px-8">Próximo</Button>
             </div>
           </div>
         )}

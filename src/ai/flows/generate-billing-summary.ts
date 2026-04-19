@@ -41,7 +41,7 @@ const prompt = ai.definePrompt({
   output: { schema: GenerateBillingSummaryOutputSchema },
   prompt: `As an administrator, I need a detailed billing summary for patient '{{{patientName}}}' (ID: {{{patientId}}}).
 
-Compile a comprehensive summary of all the following appointments and services, ensuring accuracy for invoicing purposes. The summary should clearly list each appointment, its date, a description of the service provided, and its individual cost. Finally, calculate the total accumulated cost for all services.
+Compile a comprehensive summary of all the following appointments and services, ensuring accuracy for invoicing purposes. The summary should clearly list each appointment, its date, a description of the service provided, and its individual cost. Finally, calculate the total accumulated cost for all services. Use Real (R$) for currency.
 
 Appointments:
 {{#each appointments}}
