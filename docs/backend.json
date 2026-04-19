@@ -1,0 +1,46 @@
+
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Stored information about the patient or admin users.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["patient", "admin"] }
+      },
+      "required": ["uid", "email"]
+    },
+    "Appointment": {
+      "title": "Appointment",
+      "description": "Details of a dental appointment.",
+      "type": "object",
+      "properties": {
+        "patientId": { "type": "string" },
+        "patientName": { "type": "string" },
+        "professionalId": { "type": "string" },
+        "serviceId": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "cancelled"] }
+      },
+      "required": ["patientId", "professionalId", "serviceId", "date", "time", "status"]
+    }
+  },
+  "auth": {
+    "providers": ["google.com"]
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile data."
+    },
+    "/appointments/{appointmentId}": {
+      "schema": "Appointment",
+      "description": "Dental appointments collection."
+    }
+  }
+}
