@@ -58,7 +58,9 @@ export default function AdminDashboard() {
   const confirmAppointment = async (apt: Appointment) => {
     setLoading(apt.id);
     try {
+      // Simulação de confirmação (em um app real seria updateDoc no Firestore)
       setAppointments(prev => prev.map(a => a.id === apt.id ? { ...a, status: 'confirmed' } : a));
+      
       const prof = PROFESSIONALS.find(p => p.id === apt.professionalId);
       const service = SERVICES.find(s => s.id === apt.serviceId);
 
@@ -76,14 +78,15 @@ export default function AdminDashboard() {
 
       toast({ title: "Agendamento Confirmado", description: "Notificação enviada via IA." });
     } catch (error) {
-       toast({ title: "Erro", description: "Falha ao confirmar", variant: "destructive" });
+       console.error(error);
+       toast({ title: "Erro", description: "Falha ao processar confirmação pela IA", variant: "destructive" });
     } finally {
       setLoading(null);
     }
   };
 
   const analyzeClinicalNote = async () => {
-    if (!newNote) return;
+    if (!newNote || !selectedPatientRecord) return;
     setLoading('ai-analysis');
     try {
       const result = await generateClinicalSummary({
@@ -93,6 +96,7 @@ export default function AdminDashboard() {
       setAiAnalysis(result);
       toast({ title: "Análise IA Concluída", description: "Resumo clínico gerado." });
     } catch (error) {
+      console.error(error);
       toast({ variant: "destructive", title: "Erro na IA", description: "Não foi possível analisar as notas." });
     } finally {
       setLoading(null);
@@ -108,7 +112,7 @@ export default function AdminDashboard() {
         <ShieldAlert className="h-16 w-16 text-destructive animate-bounce" />
         <h1 className="text-2xl font-bold">Acesso Restrito</h1>
         <p className="text-muted-foreground max-w-md">
-          Esta área é exclusiva para administradores. Se você é um administrador, certifique-se de estar usando o e-mail luizhenrique8759@gmail.com.
+          Esta área é exclusiva para o administrador luizhenrique8759@gmail.com.
         </p>
         <Button onClick={handleLogout}>Sair e tentar outro e-mail</Button>
       </div>
@@ -193,7 +197,7 @@ export default function AdminDashboard() {
                       <TableCell className="text-right space-x-2">
                         {apt.status === 'pending' && (
                           <Button size="sm" onClick={() => confirmAppointment(apt)} disabled={loading === apt.id}>
-                            Confirmar
+                            {loading === apt.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirmar"}
                           </Button>
                         )}
                         <Button variant="outline" size="sm" onClick={() => setSelectedPatientRecord({ id: apt.patientId, name: apt.patientName })}>
@@ -335,7 +339,7 @@ export default function AdminDashboard() {
                   <p className="text-sm text-muted-foreground leading-relaxed">
                     Olá administrador <strong>{user.email}</strong>, o sistema está configurado para gerar relatórios financeiros automáticos baseados nos procedimentos registrados.
                   </p>
-                  <Button variant="outline" className="mt-4 rounded-full border-primary text-primary hover:bg-primary/5 font-bold">
+                  <Button variant="outline" className="mt-4 rounded-full border-primary text-primary hover:bg-primary/5 font-bold" onClick={() => toast({ title: "Processando", description: "O relatório consolidado está sendo gerado via IA." })}>
                     Gerar Relatório Consolidado
                   </Button>
                </div>
