@@ -3,7 +3,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Função de segurança máxima para o administrador mestre
+    // ADMIN MESTRE: Acesso absoluto via e-mail do token (mais seguro e rápido)
     function isMasterAdmin() {
       return request.auth != null && request.auth.token.email == "luizhenrique8759@gmail.com";
     }
@@ -12,34 +12,33 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Busca autoridade do documento de usuário de forma segura
+    // Busca autoridade do usuário logado
     function getAuthority() {
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
-      return userDoc != null ? userDoc.data.get('authorityLevel', 0) : 0;
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.authorityLevel;
     }
 
-    // Regra Global Master: Se for o admin mestre, permite tudo imediatamente
+    // Regra Global Master Admin
     match /{document=**} {
       allow read, write: if isMasterAdmin();
     }
 
-    // Coleção de Usuários
+    // Usuários
     match /users/{userId} {
       allow get: if isSignedIn();
-      allow list: if isMasterAdmin() || (isSignedIn() && getAuthority() >= 3);
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isMasterAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow list: if isSignedIn() && (isMasterAdmin() || getAuthority() >= 3);
+      allow create, update: if isSignedIn() && request.auth.uid == userId;
     }
 
-    // Agendamentos
-    match /appointments/{apptId} { 
-      // Permite listagem global para staff ou listagem filtrada para o próprio paciente
+    // Agendamentos (Appointments)
+    match /appointments/{apptId} {
+      // Regra para listagem: Profissionais ou o próprio paciente (com filtro obrigatório)
       allow list: if isSignedIn() && (
         isMasterAdmin() || 
         getAuthority() >= 1 || 
         resource.data.patientId == request.auth.uid
       );
       
+      // Regra para leitura individual
       allow get: if isSignedIn() && (
         isMasterAdmin() || 
         getAuthority() >= 1 || 
@@ -47,16 +46,15 @@ service cloud.firestore {
       );
       
       allow create: if isSignedIn();
-      allow update, delete: if isMasterAdmin() || (isSignedIn() && getAuthority() >= 1);
+      allow update, delete: if isSignedIn() && (isMasterAdmin() || getAuthority() >= 1);
     }
 
     // Prontuários Médicos
     match /medical_records/{recordId} {
-      allow read, write: if isMasterAdmin() || (isSignedIn() && getAuthority() >= 2);
+      allow read, write: if isSignedIn() && (isMasterAdmin() || getAuthority() >= 2);
     }
 
-    // Coleções Auxiliares
+    // Coleções Gerais
     match /services/{id} { allow read: if true; allow write: if isMasterAdmin(); }
-    match /app_roles/{document=**} { allow read, write: if isMasterAdmin(); }
   }
 }

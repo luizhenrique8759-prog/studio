@@ -8,8 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SERVICES } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, Search, ShieldAlert, CheckCircle2, Shield, Stethoscope, Activity, UserCog } from "lucide-react";
-import { generateClinicalSummary } from "@/ai/flows/generate-clinical-summary";
+import { LogOut, Loader2, ClipboardList, Search, ShieldAlert, CheckCircle2, Shield, Stethoscope, Activity, UserCog, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
 import { signOut } from 'firebase/auth';
@@ -28,7 +27,7 @@ export default function AdminDashboard() {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
 
-  // O Admin Mestre é determinado imediatamente pelo e-mail do auth
+  // O Admin Mestre é determinado imediatamente pelo e-mail
   const isMasterAdmin = user?.email === HARDCODED_ADMIN_EMAIL;
 
   const userDocRef = useMemoFirebase(() => {
@@ -39,11 +38,10 @@ export default function AdminDashboard() {
   const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
   const authorityLevel = useMemo(() => {
-    if (isMasterAdmin) return 4; // Master sempre tem nível máximo
+    if (isMasterAdmin) return 4;
     return userData?.authorityLevel || 0;
   }, [isMasterAdmin, userData]);
 
-  // Autorizado se for Master Admin ou se o documento de usuário já carregou e tem nível >= 1
   const isAuthorized = useMemo(() => {
     if (isUserLoading) return false;
     if (isMasterAdmin) return true;
@@ -51,7 +49,7 @@ export default function AdminDashboard() {
     return authorityLevel >= 1;
   }, [isMasterAdmin, isLoadingUserData, authorityLevel, isUserLoading]);
 
-  // Consultas protegidas pelo estado de autorização
+  // Consultas estabilizadas
   const usersRef = useMemoFirebase(() => {
     if (!db || !isAuthorized || (authorityLevel < 3 && !isMasterAdmin)) return null;
     return query(collection(db, 'users'), orderBy('name', 'asc'));
@@ -60,13 +58,12 @@ export default function AdminDashboard() {
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
 
   const apptsQuery = useMemoFirebase(() => {
-    if (!db || !isAuthorized || (authorityLevel < 1 && !isMasterAdmin)) return null;
+    if (!db || !isAuthorized) return null;
     return query(collection(db, 'appointments'), orderBy('date', 'asc'));
-  }, [db, isAuthorized, authorityLevel, isMasterAdmin]);
+  }, [db, isAuthorized]);
   
   const { data: appointments, isLoading: isLoadingAppts } = useCollection(apptsQuery);
 
-  const [loading, setLoading] = useState<string | null>(null);
   const [searchPatient, setSearchPatient] = useState("");
   const [selectedPatientRecord, setSelectedPatientRecord] = useState<{id: string, name: string} | null>(null);
 
@@ -91,19 +88,19 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleToggleProfessional = async (targetUser: any, level: string) => {
+  const handleToggleProfessional = async (targetUser: any, levelStr: string) => {
     if (!db || !isMasterAdmin) return;
-    const newLevel = parseInt(level);
-    const newRole = newLevel === 0 ? 'patient' : (newLevel === 3 ? 'admin' : 'professional');
+    const level = parseInt(levelStr);
+    const role = level === 0 ? 'patient' : (level === 3 ? 'admin' : 'professional');
     
     try {
       const userRef = doc(db, 'users', targetUser.id);
       await updateDoc(userRef, { 
-        role: newRole,
-        authorityLevel: newLevel,
+        role,
+        authorityLevel: level,
         updatedAt: new Date().toISOString()
       });
-      toast({ title: "Autoridade Atualizada", description: `${targetUser.name} agora é Nível ${newLevel}.` });
+      toast({ title: "Autoridade Atualizada", description: `${targetUser.name} agora é Nível ${level}.` });
     } catch (error) {
       toast({ variant: "destructive", title: "Erro ao atualizar privilégios" });
     }
@@ -127,7 +124,14 @@ export default function AdminDashboard() {
     }, 0);
   }, [appointments]);
 
-  if (isUserLoading || (isLoadingUserData && !isMasterAdmin)) return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (isUserLoading || (isLoadingUserData && !isMasterAdmin)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   if (!user) return null;
 
   if (!isAuthorized) {
@@ -135,8 +139,8 @@ export default function AdminDashboard() {
       <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center space-y-4">
         <ShieldAlert className="h-16 w-16 text-destructive" />
         <h1 className="text-2xl font-bold">Acesso Restrito</h1>
-        <p className="text-muted-foreground">Esta área é exclusiva para colaboradores autorizados.</p>
-        <Button onClick={handleLogout}>Voltar</Button>
+        <p className="text-muted-foreground">Área exclusiva para profissionais autorizados.</p>
+        <Button onClick={handleLogout}>Sair</Button>
       </div>
     );
   }
@@ -161,7 +165,7 @@ export default function AdminDashboard() {
               </p>
               <Badge variant="outline" className="rounded-full bg-slate-50 cursor-pointer hover:bg-slate-100" asChild>
                 <Link href="/dashboard" className="flex items-center gap-1">
-                  <Activity className="h-3 w-3" /> Acessar Área do Paciente
+                  <Activity className="h-3 w-3" /> Ver Meu Painel de Paciente
                 </Link>
               </Badge>
             </div>
@@ -187,7 +191,7 @@ export default function AdminDashboard() {
         
         <TabsContent value="appointments">
           <Card className="border-none shadow-2xl bg-card rounded-[2rem] overflow-hidden">
-            <CardHeader className="bg-muted/20 border-b"><CardTitle>Atendimentos da Clínica</CardTitle></CardHeader>
+            <CardHeader className="bg-muted/20 border-b"><CardTitle>Atendimentos em Sincronia</CardTitle></CardHeader>
             <CardContent className="p-0">
               {isLoadingAppts ? (
                 <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary" /></div>
@@ -224,7 +228,11 @@ export default function AdminDashboard() {
                         </TableCell>
                       </TableRow>
                     ))}
-                    {!isLoadingAppts && appointments?.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">Nenhum agendamento ativo.</TableCell></TableRow>}
+                    {!isLoadingAppts && appointments?.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">Nenhum agendamento ativo.</TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               )}
@@ -236,12 +244,14 @@ export default function AdminDashboard() {
           <TabsContent value="management">
             <Card className="border-none shadow-2xl rounded-[2rem]">
               <CardHeader>
-                <CardTitle className="flex items-center gap-3 text-2xl"><Users className="h-6 w-6 text-primary" /> Gestão de Colaboradores</CardTitle>
-                <CardDescription>Defina o nível de acesso para cada profissional.</CardDescription>
+                <CardTitle className="flex items-center gap-3 text-2xl"><Users className="h-6 w-6 text-primary" /> Gestão de Equipe</CardTitle>
+                <CardDescription>Defina os níveis de acesso de cada colaborador.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {isLoadingUsers ? <div className="col-span-full flex justify-center py-12"><Loader2 className="animate-spin text-primary" /></div> : allUsers?.map(u => (
+                  {isLoadingUsers ? (
+                    <div className="col-span-full flex justify-center py-12"><Loader2 className="animate-spin text-primary" /></div>
+                  ) : allUsers?.map(u => (
                     <div key={u.id} className="p-6 border rounded-[2rem] hover:shadow-lg transition-all space-y-4">
                       <div className="flex items-center gap-4">
                         <Avatar className="h-12 w-12">
@@ -261,10 +271,10 @@ export default function AdminDashboard() {
                           disabled={!isMasterAdmin || u.email === HARDCODED_ADMIN_EMAIL}
                         >
                           <option value="0">Paciente</option>
-                          <option value="1">Nível 1 - Recepção (Agenda)</option>
-                          <option value="2">Nível 2 - Auxiliar (Agenda + Prontuário)</option>
-                          <option value="3">Nível 3 - Administrativo (Total)</option>
-                          <option value="4">Nível 4 - Dentista (Agenda + Prontuário + IA)</option>
+                          <option value="1">Lvl 1 - Recepção (Agenda)</option>
+                          <option value="2">Lvl 2 - Assistente (Agenda + Prontuário)</option>
+                          <option value="3">Lvl 3 - Adm (Agenda + Financeiro + Equipe)</option>
+                          <option value="4">Lvl 4 - Dentista (Agenda + Prontuário Pleno)</option>
                         </select>
                       </div>
                     </div>
@@ -279,15 +289,15 @@ export default function AdminDashboard() {
           <TabsContent value="billing">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               <Card className="bg-primary text-white border-none shadow-xl rounded-[2rem] p-8">
-                <p className="text-xs uppercase font-black opacity-60 mb-2 tracking-widest">Faturamento Estimado</p>
+                <p className="text-xs uppercase font-black opacity-60 mb-2 tracking-widest">Faturamento</p>
                 <p className="text-5xl font-black">R$ {totalBilling.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
               </Card>
               <Card className="bg-muted border-none shadow-xl rounded-[2rem] p-8">
-                <p className="text-xs uppercase font-black text-muted-foreground mb-2 tracking-widest">Atendimentos Totais</p>
+                <p className="text-xs uppercase font-black text-muted-foreground mb-2 tracking-widest">Total Consultas</p>
                 <p className="text-5xl font-black">{appointments?.length || 0}</p>
               </Card>
               <Card className="bg-accent text-white border-none shadow-xl rounded-[2rem] p-8">
-                <p className="text-xs uppercase font-black opacity-60 mb-2 tracking-widest">Novos Pacientes</p>
+                <p className="text-xs uppercase font-black opacity-60 mb-2 tracking-widest">Base Pacientes</p>
                 <p className="text-5xl font-black">{allUsers?.filter(u => u.role === 'patient').length || 0}</p>
               </Card>
             </div>
@@ -301,7 +311,7 @@ export default function AdminDashboard() {
                 <CardHeader className="pb-4">
                   <div className="relative">
                     <Search className="absolute left-4 top-3.5 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Filtrar por nome..." className="pl-12 h-12 rounded-2xl bg-muted/30 border-none" value={searchPatient} onChange={(e) => setSearchPatient(e.target.value)} />
+                    <Input placeholder="Buscar paciente..." className="pl-12 h-12 rounded-2xl bg-muted/30 border-none" value={searchPatient} onChange={(e) => setSearchPatient(e.target.value)} />
                   </div>
                 </CardHeader>
                 <CardContent className="flex-1 overflow-y-auto space-y-3 px-4 pb-4">
@@ -331,14 +341,14 @@ export default function AdminDashboard() {
                         <div className="h-12 w-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary"><ClipboardList className="h-6 w-6" /></div>
                         <div>
                           <CardTitle className="text-3xl font-headline">{selectedPatientRecord.name}</CardTitle>
-                          <CardDescription className="font-black uppercase tracking-widest text-[10px] text-primary">Prontuário Digital</CardDescription>
+                          <CardDescription className="font-black uppercase tracking-widest text-[10px] text-primary">Prontuário Digital Sincronizado</CardDescription>
                         </div>
                       </div>
                     </CardHeader>
                     <CardContent className="p-10 flex flex-col items-center justify-center flex-1">
                       <div className="text-center space-y-4 max-w-sm opacity-30">
                         <Stethoscope className="h-20 w-20 mx-auto text-muted-foreground" />
-                        <p className="text-lg font-bold">Histórico clínico em sincronia.</p>
+                        <p className="text-lg font-bold">Histórico e Evoluções Clínicas.</p>
                       </div>
                     </CardContent>
                   </div>
