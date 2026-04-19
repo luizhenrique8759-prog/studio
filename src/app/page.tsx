@@ -1,5 +1,9 @@
+
+"use client";
+
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { 
   Calendar, 
   ShieldCheck, 
@@ -10,14 +14,72 @@ import {
   Star, 
   CheckCircle2, 
   ArrowRight,
-  Shield
+  Shield,
+  Loader2
 } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
+import { doc } from 'firebase/firestore';
+
+const HARDCODED_ADMIN_EMAIL = "luizhenrique8759@gmail.com";
 
 export default function LandingPage() {
+  const { user, isUserLoading } = useUser();
+  const db = useFirestore();
+
+  const userDocRef = useMemoFirebase(() => {
+    if (!user || !db) return null;
+    return doc(db, 'users', user.uid);
+  }, [db, user]);
+
+  const { data: userData, isLoading: isLoadingDoc } = useDoc(userDocRef);
+
+  const isAdmin = user?.email === HARDCODED_ADMIN_EMAIL;
+  const isProfessional = userData?.role === 'professional';
+
+  const renderAuthButton = (className?: string) => {
+    if (isUserLoading || isLoadingDoc) return <Loader2 className="animate-spin h-5 w-5 text-primary" />;
+
+    if (!user) {
+      return (
+        <div className="flex gap-4 items-center">
+          <Link className="text-sm font-semibold hover:text-primary transition-colors" href="/auth">Entrar</Link>
+          <Button asChild className={`rounded-full px-8 bg-primary hover:scale-105 transition-transform ${className}`}>
+            <Link href="/booking">Agendar Agora</Link>
+          </Button>
+        </div>
+      );
+    }
+
+    if (isAdmin) {
+      return (
+        <Button asChild className={`rounded-full px-6 bg-primary shadow-lg shadow-primary/20 ${className}`}>
+          <Link href="/admin" className="flex items-center gap-2">
+            <Shield className="h-4 w-4" /> Portal Administrador
+          </Link>
+        </Button>
+      );
+    }
+
+    if (isProfessional) {
+      return (
+        <Button asChild className={`rounded-full px-6 bg-accent text-white shadow-lg shadow-accent/20 ${className}`}>
+          <Link href="/admin" className="flex items-center gap-2">
+            <Stethoscope className="h-4 w-4" /> Portal Colaborador
+          </Link>
+        </Button>
+      );
+    }
+
+    return (
+      <Button asChild variant="outline" className={`rounded-full px-6 border-2 ${className}`}>
+        <Link href="/dashboard">Meu Painel</Link>
+      </Button>
+    );
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      {/* Navbar Transparente com Blur */}
       <header className="px-4 lg:px-6 h-20 flex items-center border-b bg-white/70 backdrop-blur-xl sticky top-0 z-50">
         <div className="container mx-auto flex items-center justify-between">
           <Link className="flex items-center gap-2 group" href="/">
@@ -32,30 +94,27 @@ export default function LandingPage() {
             <Link className="text-sm font-semibold hover:text-primary transition-colors" href="#features">Tecnologia</Link>
             <Link className="text-sm font-semibold hover:text-primary transition-colors" href="#faq">Dúvidas</Link>
             <div className="h-6 w-px bg-border mx-2" />
-            <Link className="text-sm font-semibold hover:text-primary transition-colors" href="/auth">Entrar</Link>
-            <Button asChild className="rounded-full px-8 bg-primary hover:scale-105 transition-transform">
-              <Link href="/booking">Agendar Agora</Link>
-            </Button>
+            {renderAuthButton()}
           </nav>
 
-          {/* Mobile Menu Trigger (Simplified) */}
           <div className="md:hidden">
              <Button variant="ghost" size="icon" asChild>
-                <Link href="/auth"><Users className="h-6 w-6" /></Link>
+                <Link href={user ? (isAdmin || isProfessional ? "/admin" : "/dashboard") : "/auth"}>
+                  <Users className="h-6 w-6" />
+                </Link>
              </Button>
           </div>
         </div>
       </header>
 
       <main className="flex-1">
-        {/* Seção Hero - Impacto Visual */}
         <section className="relative w-full py-20 md:py-32 lg:py-48 overflow-hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(var(--primary),0.1),transparent_50%)]" />
           <div className="container px-4 md:px-6 mx-auto">
             <div className="grid gap-12 lg:grid-cols-2 items-center">
               <div className="flex flex-col justify-center space-y-8 z-10">
                 <div className="space-y-4">
-                  <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-bold uppercase tracking-wider animate-bounce">
+                  <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-bold uppercase tracking-wider">
                     <Star className="h-3 w-3 fill-current" /> Clínica Nº 1 em Tecnologia
                   </div>
                   <h1 className="text-5xl font-headline font-extrabold tracking-tight sm:text-6xl xl:text-7xl/none text-foreground leading-[1.1]">
@@ -69,21 +128,7 @@ export default function LandingPage() {
                   <Button asChild size="lg" className="rounded-full px-10 h-16 text-xl font-bold shadow-2xl shadow-primary/30 hover:translate-y-[-2px] transition-all">
                     <Link href="/booking">Começar Agendamento <ArrowRight className="ml-2 h-6 w-6" /></Link>
                   </Button>
-                  <Button asChild variant="outline" size="lg" className="rounded-full px-10 h-16 text-xl border-2">
-                    <Link href="/admin">Sou Dentista</Link>
-                  </Button>
-                </div>
-                <div className="flex items-center gap-4 pt-4">
-                  <div className="flex -space-x-3">
-                    {[1,2,3,4].map(i => (
-                      <div key={i} className="w-10 h-10 rounded-full border-2 border-background overflow-hidden">
-                        <img src={`https://picsum.photos/seed/face${i}/100/100`} alt="Paciente" />
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    <span className="text-foreground font-bold">+2.000</span> sorrisos transformados este mês
-                  </p>
+                  {renderAuthButton("h-16 text-xl px-10")}
                 </div>
               </div>
               <div className="relative group">
@@ -112,7 +157,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Seção de Serviços */}
         <section id="services" className="w-full py-24 bg-secondary/20">
           <div className="container px-4 md:px-6 mx-auto">
             <div className="text-center space-y-4 mb-16">
@@ -140,7 +184,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Por que escolher o Sync? */}
         <section id="features" className="w-full py-24 border-t">
           <div className="container px-4 md:px-6 mx-auto">
             <div className="flex flex-col items-center justify-center space-y-4 text-center mb-16">
@@ -175,7 +218,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* FAQ - Acordeão */}
         <section id="faq" className="w-full py-24 bg-white">
           <div className="container px-4 md:px-6 mx-auto max-w-3xl">
             <h2 className="text-4xl font-headline font-bold text-center mb-12 text-primary">Dúvidas Comuns</h2>
@@ -202,7 +244,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* CTA Final */}
         <section className="w-full py-24">
           <div className="container px-4 mx-auto">
             <div className="bg-primary rounded-[3rem] p-12 md:p-24 text-center text-primary-foreground relative overflow-hidden shadow-[0_40px_100px_rgba(var(--primary),0.3)]">
@@ -219,7 +260,6 @@ export default function LandingPage() {
         </section>
       </main>
 
-      {/* Footer Elegante */}
       <footer className="w-full border-t bg-slate-50 py-16">
         <div className="container px-4 md:px-6 mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">

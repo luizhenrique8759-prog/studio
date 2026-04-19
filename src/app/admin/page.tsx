@@ -8,10 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MOCK_APPOINTMENTS, SERVICES, Appointment, TIME_SLOTS } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, CheckCircle2, Calendar as CalendarIcon, Clock, Users, DollarSign, UserPlus, UserMinus } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, CheckCircle2, Calendar as CalendarIcon, Clock, Users, DollarSign, UserPlus, UserMinus, Shield } from "lucide-react";
 import { generateClinicalSummary } from "@/ai/flows/generate-clinical-summary";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -30,6 +30,13 @@ export default function AdminDashboard() {
   const db = useFirestore();
   const { user, isUserLoading } = useUser();
   const router = useRouter();
+
+  const userDocRef = useMemoFirebase(() => {
+    if (!user || !db) return null;
+    return doc(db, 'users', user.uid);
+  }, [db, user]);
+
+  const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
   const usersRef = useMemoFirebase(() => {
     if (!user || !db || user.email !== HARDCODED_ADMIN_EMAIL) return null;
@@ -56,6 +63,7 @@ export default function AdminDashboard() {
   }, [user, isUserLoading, router]);
 
   const isAdmin = user?.email === HARDCODED_ADMIN_EMAIL;
+  const isProfessional = userData?.role === 'professional' || isAdmin;
 
   const handleLogout = async () => {
     if (!auth) return;
@@ -69,7 +77,7 @@ export default function AdminDashboard() {
   };
 
   const handleToggleProfessional = async (targetUser: any) => {
-    if (!db) return;
+    if (!db || !isAdmin) return;
     const isProf = targetUser.role === 'professional';
     const newRole = isProf ? 'patient' : 'professional';
     
@@ -133,15 +141,15 @@ export default function AdminDashboard() {
     }
   };
 
-  if (isUserLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (isUserLoading || isLoadingUserData) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!user) return null;
 
-  if (!isAdmin) {
+  if (!isProfessional) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center space-y-4">
         <ShieldAlert className="h-16 w-16 text-destructive animate-bounce" />
         <h1 className="text-2xl font-bold">Acesso Restrito</h1>
-        <p className="text-muted-foreground max-w-md">Esta área é exclusiva para o administrador.</p>
+        <p className="text-muted-foreground max-w-md">Esta área é exclusiva para profissionais autorizados.</p>
         <Button onClick={handleLogout}>Sair</Button>
       </div>
     );
@@ -151,13 +159,17 @@ export default function AdminDashboard() {
     <div className="p-4 md:p-8 space-y-8 bg-background min-h-screen">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-center gap-4">
-          <Avatar className="h-12 w-12 border-2 border-primary">
+          <Avatar className={`h-12 w-12 border-2 ${isAdmin ? 'border-primary' : 'border-accent'}`}>
             <AvatarImage src={user.photoURL || undefined} />
-            <AvatarFallback className="bg-primary text-white font-bold">{user.displayName?.substring(0,2).toUpperCase()}</AvatarFallback>
+            <AvatarFallback className={`${isAdmin ? 'bg-primary' : 'bg-accent'} text-white font-bold`}>{user.displayName?.substring(0,2).toUpperCase()}</AvatarFallback>
           </Avatar>
           <div>
-            <h1 className="text-4xl font-headline font-bold text-primary tracking-tight">Portal Sync</h1>
-            <p className="text-muted-foreground">Gestão Administrativa: {user.email}</p>
+            <h1 className="text-4xl font-headline font-bold text-primary tracking-tight">
+              Portal {isAdmin ? 'Administrador' : 'Colaborador'}
+            </h1>
+            <p className="text-muted-foreground flex items-center gap-2">
+              {isAdmin ? <Shield className="h-3 w-3" /> : <Stethoscope className="h-3 w-3" />} {user.email}
+            </p>
           </div>
         </div>
         <Button variant="outline" className="rounded-full text-destructive border-destructive" onClick={handleLogout}>
@@ -169,8 +181,8 @@ export default function AdminDashboard() {
         <TabsList className="bg-muted p-1 rounded-xl mb-6 flex-wrap h-auto">
           <TabsTrigger value="appointments" className="rounded-lg px-6">Agenda</TabsTrigger>
           <TabsTrigger value="records" className="rounded-lg px-6">Prontuários</TabsTrigger>
-          <TabsTrigger value="management" className="rounded-lg px-6">Equipe & Usuários</TabsTrigger>
-          <TabsTrigger value="billing" className="rounded-lg px-6">Financeiro</TabsTrigger>
+          {isAdmin && <TabsTrigger value="management" className="rounded-lg px-6">Equipe & Usuários</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="billing" className="rounded-lg px-6">Financeiro</TabsTrigger>}
         </TabsList>
         
         <TabsContent value="appointments">
@@ -222,103 +234,107 @@ export default function AdminDashboard() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="management">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card className="border-none shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Todos os Usuários</CardTitle>
-                <CardDescription>Gerencie acessos e defina colaboradores.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {isLoadingUsers ? <Loader2 className="animate-spin" /> : allUsers?.map(u => (
-                    <div key={u.id} className="flex items-center justify-between p-3 border rounded-xl">
-                      <div>
-                        <p className="font-bold text-sm">{u.name}</p>
-                        <p className="text-xs text-muted-foreground">{u.email}</p>
-                        <Badge variant={u.role === 'professional' ? 'default' : 'outline'} className="mt-1 text-[8px]">
-                          {u.role === 'professional' ? 'Colaborador' : 'Paciente'}
-                        </Badge>
-                      </div>
-                      <Button 
-                        size="sm" 
-                        variant={u.role === 'professional' ? 'destructive' : 'default'} 
-                        className="rounded-full h-8"
-                        onClick={() => handleToggleProfessional(u)}
-                      >
-                        {u.role === 'professional' ? <UserMinus className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
-                      </Button>
+        {isAdmin && (
+          <>
+            <TabsContent value="management">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Card className="border-none shadow-lg">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Todos os Usuários</CardTitle>
+                    <CardDescription>Gerencie acessos e defina colaboradores.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {isLoadingUsers ? <Loader2 className="animate-spin" /> : allUsers?.map(u => (
+                        <div key={u.id} className="flex items-center justify-between p-3 border rounded-xl">
+                          <div>
+                            <p className="font-bold text-sm">{u.name}</p>
+                            <p className="text-xs text-muted-foreground">{u.email}</p>
+                            <Badge variant={u.role === 'professional' ? 'default' : 'outline'} className="mt-1 text-[8px]">
+                              {u.role === 'professional' ? 'Colaborador' : 'Paciente'}
+                            </Badge>
+                          </div>
+                          <Button 
+                            size="sm" 
+                            variant={u.role === 'professional' ? 'destructive' : 'default'} 
+                            className="rounded-full h-8"
+                            onClick={() => handleToggleProfessional(u)}
+                          >
+                            {u.role === 'professional' ? <UserMinus className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
 
-            <Card className="border-none shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><ShieldAlert className="h-5 w-5" /> Equipe Ativa</CardTitle>
-                <CardDescription>Colaboradores com acesso ao prontuário.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {allUsers?.filter(u => u.role === 'professional').map(u => (
-                    <div key={u.id} className="flex items-center gap-3 p-2 bg-primary/5 rounded-lg border border-primary/10">
-                      <Avatar className="h-8 w-8">
-                        <AvatarFallback className="bg-primary text-white text-[10px]">{u.name.substring(0,2)}</AvatarFallback>
-                      </Avatar>
-                      <p className="text-sm font-medium">{u.name}</p>
+                <Card className="border-none shadow-lg">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><ShieldAlert className="h-5 w-5" /> Equipe Ativa</CardTitle>
+                    <CardDescription>Colaboradores com acesso ao prontuário.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {allUsers?.filter(u => u.role === 'professional').map(u => (
+                        <div key={u.id} className="flex items-center gap-3 p-2 bg-primary/5 rounded-lg border border-primary/10">
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback className="bg-primary text-white text-[10px]">{u.name.substring(0,2)}</AvatarFallback>
+                          </Avatar>
+                          <p className="text-sm font-medium">{u.name}</p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="billing">
-          <Card className="border-none shadow-lg overflow-hidden">
-            <CardHeader className="bg-primary/5 border-b">
-              <CardTitle className="flex items-center gap-2"><DollarSign className="h-5 w-5" /> Resumo Financeiro</CardTitle>
-              <CardDescription>Acompanhamento manual dos procedimentos e faturamento.</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 bg-primary/10 rounded-2xl border border-primary/20">
-                  <p className="text-xs uppercase font-bold text-muted-foreground">Total Bruto</p>
-                  <p className="text-3xl font-bold text-primary">R$ {totalBilling.toFixed(2)}</p>
-                </div>
-                <div className="p-4 bg-muted rounded-2xl border">
-                  <p className="text-xs uppercase font-bold text-muted-foreground">Procedimentos</p>
-                  <p className="text-3xl font-bold">{appointments.length}</p>
-                </div>
+                  </CardContent>
+                </Card>
               </div>
-              
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Paciente</TableHead>
-                    <TableHead>Serviço</TableHead>
-                    <TableHead className="text-right">Valor</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {appointments.map((apt) => {
-                    const service = SERVICES.find(s => s.id === apt.serviceId);
-                    return (
-                      <TableRow key={apt.id}>
-                        <TableCell className="text-xs">{apt.date}</TableCell>
-                        <TableCell className="font-medium">{apt.patientName}</TableCell>
-                        <TableCell className="text-xs">{service?.name}</TableCell>
-                        <TableCell className="text-right font-bold">R$ {service?.price.toFixed(2)}</TableCell>
+            </TabsContent>
+
+            <TabsContent value="billing">
+              <Card className="border-none shadow-lg overflow-hidden">
+                <CardHeader className="bg-primary/5 border-b">
+                  <CardTitle className="flex items-center gap-2"><DollarSign className="h-5 w-5" /> Resumo Financeiro</CardTitle>
+                  <CardDescription>Acompanhamento manual dos procedimentos e faturamento.</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-6 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 bg-primary/10 rounded-2xl border border-primary/20">
+                      <p className="text-xs uppercase font-bold text-muted-foreground">Total Bruto</p>
+                      <p className="text-3xl font-bold text-primary">R$ {totalBilling.toFixed(2)}</p>
+                    </div>
+                    <div className="p-4 bg-muted rounded-2xl border">
+                      <p className="text-xs uppercase font-bold text-muted-foreground">Procedimentos</p>
+                      <p className="text-3xl font-bold">{appointments.length}</p>
+                    </div>
+                  </div>
+                  
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Data</TableHead>
+                        <TableHead>Paciente</TableHead>
+                        <TableHead>Serviço</TableHead>
+                        <TableHead className="text-right">Valor</TableHead>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                    </TableHeader>
+                    <TableBody>
+                      {appointments.map((apt) => {
+                        const service = SERVICES.find(s => s.id === apt.serviceId);
+                        return (
+                          <TableRow key={apt.id}>
+                            <TableCell className="text-xs">{apt.date}</TableCell>
+                            <TableCell className="font-medium">{apt.patientName}</TableCell>
+                            <TableCell className="text-xs">{service?.name}</TableCell>
+                            <TableCell className="text-right font-bold">R$ {service?.price.toFixed(2)}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </>
+        )}
 
         <TabsContent value="records">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -330,16 +346,20 @@ export default function AdminDashboard() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-2">
-                {allUsers?.filter(u => u.name.toLowerCase().includes(searchPatient.toLowerCase())).map(u => (
-                  <div 
-                    key={u.id} 
-                    className={`p-3 rounded-lg border cursor-pointer ${selectedPatientRecord?.id === u.id ? 'bg-primary/5 border-primary' : 'hover:bg-muted'}`}
-                    onClick={() => setSelectedPatientRecord({ id: u.id, name: u.name })}
-                  >
-                    <p className="font-bold text-sm">{u.name}</p>
-                    <p className="text-[10px] text-muted-foreground uppercase">{u.email}</p>
-                  </div>
-                ))}
+                {isAdmin ? (
+                  allUsers?.filter(u => u.name.toLowerCase().includes(searchPatient.toLowerCase())).map(u => (
+                    <div 
+                      key={u.id} 
+                      className={`p-3 rounded-lg border cursor-pointer ${selectedPatientRecord?.id === u.id ? 'bg-primary/5 border-primary' : 'hover:bg-muted'}`}
+                      onClick={() => setSelectedPatientRecord({ id: u.id, name: u.name })}
+                    >
+                      <p className="font-bold text-sm">{u.name}</p>
+                      <p className="text-[10px] text-muted-foreground uppercase">{u.email}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground p-4 text-center">Para visualizar pacientes, utilize a agenda ou busque pelo nome.</p>
+                )}
               </CardContent>
             </Card>
 
