@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -144,7 +143,7 @@ export default function AdminDashboard() {
                     <TableHead>Serviço</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead>Horário</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -154,8 +153,15 @@ export default function AdminDashboard() {
                       <TableCell>{SERVICES.find(s => s.id === apt.serviceId)?.name}</TableCell>
                       <TableCell>{apt.date}</TableCell>
                       <TableCell>{apt.time}</TableCell>
-                      <TableCell>
-                        <Badge variant={apt.status === 'confirmed' ? 'secondary' : 'outline'}>
+                      <TableCell className="text-right">
+                        <Badge 
+                          className={`rounded-full px-4 py-1 font-bold text-[10px] uppercase tracking-wider ${
+                            apt.status === 'confirmed' 
+                              ? 'bg-accent/20 text-accent border-accent/30 hover:bg-accent/30' 
+                              : 'bg-primary/10 text-primary border-primary/30 hover:bg-primary/20'
+                          }`}
+                          variant="outline"
+                        >
                           {apt.status === 'confirmed' ? 'Confirmado' : 'Pendente'}
                         </Badge>
                       </TableCell>
