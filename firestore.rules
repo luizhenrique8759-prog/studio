@@ -25,6 +25,8 @@ service cloud.firestore {
       allow get: if isSignedIn();
       allow list: if isAdmin() || isProfessional();
       allow create, update: if isSignedIn() && request.auth.uid == userId;
+      // Permite que o admin atualize o campo 'role' do usuário
+      allow update: if isAdmin();
     }
 
     match /medical_records/{recordId} {
@@ -36,7 +38,8 @@ service cloud.firestore {
 
     match /app_roles/{role}/{userId} {
       allow get: if isSignedIn();
-      allow write: if false; 
+      // Permitir que o administrador atribua papéis
+      allow write: if isAdmin(); 
     }
     
     match /appointments/{id} { allow read, write: if isSignedIn(); }

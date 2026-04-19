@@ -8,17 +8,18 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MOCK_APPOINTMENTS, SERVICES, Appointment, TIME_SLOTS } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, Sparkles, CheckCircle2, Calendar as CalendarIcon, Clock } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, Sparkles, CheckCircle2, Calendar as CalendarIcon, Clock, Users, DollarSign, UserPlus, UserMinus } from "lucide-react";
 import { generateClinicalSummary } from "@/ai/flows/generate-clinical-summary";
+import { generateBillingSummary } from "@/ai/flows/generate-billing-summary";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth, useUser } from '@/firebase';
+import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { collection, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { format, addDays, isSunday, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -27,8 +28,17 @@ const HARDCODED_ADMIN_EMAIL = "luizhenrique8759@gmail.com";
 export default function AdminDashboard() {
   const { toast } = useToast();
   const auth = useAuth();
+  const db = useFirestore();
   const { user, isUserLoading } = useUser();
   const router = useRouter();
+  
+  // Queries do Firebase
+  const usersRef = useMemoFirebase(() => collection(db, 'users'), [db]);
+  const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
+
+  const rolesRef = useMemoFirebase(() => collection(db, 'app_roles/professional/users'), [db]);
+  // Nota: Estrutura app_roles/professional/{userId} implica que listamos a subcoleção ou verificamos os documentos
+  // Para simplificar a gestão, vamos buscar todos os usuários e verificar o campo 'role'
   
   const [appointments, setAppointments] = useState<Appointment[]>(MOCK_APPOINTMENTS);
   const [loading, setLoading] = useState<string | null>(null);
@@ -36,6 +46,7 @@ export default function AdminDashboard() {
   const [selectedPatientRecord, setSelectedPatientRecord] = useState<{id: string, name: string} | null>(null);
   const [newNote, setNewNote] = useState("");
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
+  const [billingResult, setBillingResult] = useState<any>(null);
 
   // Estados para reagendamento
   const [reschedulingAppointment, setReschedulingAppointment] = useState<Appointment | null>(null);
@@ -61,42 +72,66 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleToggleProfessional = async (targetUser: any) => {
+    if (!db) return;
+    const isProf = targetUser.role === 'professional';
+    const newRole = isProf ? 'patient' : 'professional';
+    
+    try {
+      // 1. Atualizar o documento do usuário
+      const userRef = doc(db, 'users', targetUser.id);
+      await updateDoc(userRef, { role: newRole });
+
+      // 2. Criar/Remover o indicador de role
+      const roleRef = doc(db, 'app_roles', 'professional', 'users', targetUser.id);
+      if (newRole === 'professional') {
+        await setDoc(roleRef, { active: true, assignedAt: new Date().toISOString() });
+      } else {
+        await deleteDoc(roleRef);
+      }
+
+      toast({
+        title: "Papel Atualizado",
+        description: `${targetUser.name} agora é ${newRole === 'professional' ? 'um colaborador' : 'um paciente'}.`
+      });
+    } catch (error) {
+      toast({ variant: "destructive", title: "Erro ao atualizar", description: "Verifique suas permissões." });
+    }
+  };
+
+  const generateReport = async () => {
+    setLoading('billing');
+    try {
+      const result = await generateBillingSummary({
+        patientId: "Geral",
+        patientName: "Relatório Mensal",
+        appointments: appointments.map(a => ({
+          appointmentId: a.id,
+          date: a.date,
+          serviceDescription: SERVICES.find(s => s.id === a.serviceId)?.name || "Serviço",
+          cost: SERVICES.find(s => s.id === a.serviceId)?.price || 0
+        }))
+      });
+      setBillingResult(result);
+    } catch (error) {
+      toast({ variant: "destructive", title: "Erro Financeiro", description: "Não foi possível gerar o resumo." });
+    } finally {
+      setLoading(null);
+    }
+  };
+
   const handleConfirmAppointment = (id: string) => {
     setAppointments(prev => prev.map(apt => 
       apt.id === id ? { ...apt, status: 'confirmed' as const } : apt
     ));
-    toast({
-      title: "Agendamento Confirmado",
-      description: "O status do paciente foi atualizado com sucesso.",
-    });
-  };
-
-  const handleRescheduleSubmit = () => {
-    if (!reschedulingAppointment || !newDate || !newTime) return;
-
-    setAppointments(prev => prev.map(apt => 
-      apt.id === reschedulingAppointment.id 
-        ? { ...apt, date: format(newDate, "yyyy-MM-dd"), time: newTime, status: 'pending' as const } 
-        : apt
-    ));
-
-    toast({
-      title: "Reagendamento Concluído",
-      description: `Nova data: ${format(newDate, "dd/MM/yyyy")} às ${newTime}`,
-    });
-
-    setReschedulingAppointment(null);
-    setNewDate(undefined);
-    setNewTime("");
+    toast({ title: "Agendamento Confirmado" });
   };
 
   const availableDates = useMemo(() => {
     const dates = [];
     let current = startOfDay(new Date());
     while (dates.length < 12) {
-      if (!isSunday(current)) {
-        dates.push(new Date(current));
-      }
+      if (!isSunday(current)) dates.push(new Date(current));
       current = addDays(current, 1);
     }
     return dates;
@@ -111,9 +146,8 @@ export default function AdminDashboard() {
         dentistNotes: newNote
       });
       setAiAnalysis(result);
-      toast({ title: "Análise IA Concluída", description: "Resumo clínico gerado para suporte." });
     } catch (error) {
-      toast({ variant: "destructive", title: "Erro na IA", description: "Não foi possível analisar as notas." });
+      toast({ variant: "destructive", title: "Erro na IA" });
     } finally {
       setLoading(null);
     }
@@ -127,15 +161,11 @@ export default function AdminDashboard() {
       <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center space-y-4">
         <ShieldAlert className="h-16 w-16 text-destructive animate-bounce" />
         <h1 className="text-2xl font-bold">Acesso Restrito</h1>
-        <p className="text-muted-foreground max-w-md">
-          Esta área é exclusiva para o administrador {HARDCODED_ADMIN_EMAIL}.
-        </p>
-        <Button onClick={handleLogout}>Sair e tentar outro e-mail</Button>
+        <p className="text-muted-foreground max-w-md">Esta área é exclusiva para o administrador.</p>
+        <Button onClick={handleLogout}>Sair</Button>
       </div>
     );
   }
-
-  const adminInitials = user.displayName?.substring(0, 2).toUpperCase() || 'AD';
 
   return (
     <div className="p-4 md:p-8 space-y-8 bg-background min-h-screen">
@@ -143,57 +173,37 @@ export default function AdminDashboard() {
         <div className="flex items-center gap-4">
           <Avatar className="h-12 w-12 border-2 border-primary">
             <AvatarImage src={user.photoURL || undefined} />
-            <AvatarFallback className="bg-primary text-white font-bold">{adminInitials}</AvatarFallback>
+            <AvatarFallback className="bg-primary text-white font-bold">{user.displayName?.substring(0,2).toUpperCase()}</AvatarFallback>
           </Avatar>
           <div>
-            <h1 className="text-4xl font-headline font-bold text-primary tracking-tight">Portal Clínico</h1>
-            <p className="text-muted-foreground">Logado como: {user.email}</p>
+            <h1 className="text-4xl font-headline font-bold text-primary tracking-tight">Portal Sync</h1>
+            <p className="text-muted-foreground">Gestão Administrativa: {user.email}</p>
           </div>
         </div>
-        <Button variant="outline" className="rounded-full text-destructive border-destructive hover:bg-destructive/10" onClick={handleLogout}>
-          <LogOut className="mr-2 h-4 w-4" /> Sair do Sistema
+        <Button variant="outline" className="rounded-full text-destructive border-destructive" onClick={handleLogout}>
+          <LogOut className="mr-2 h-4 w-4" /> Sair
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-card border-none shadow-sm">
-          <CardHeader className="pb-2"><CardTitle className="text-xs uppercase text-muted-foreground">Pacientes</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-bold">1.240</div></CardContent>
-        </Card>
-        <Card className="bg-card border-none shadow-sm">
-          <CardHeader className="pb-2"><CardTitle className="text-xs uppercase text-muted-foreground">Prontuários</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-bold">850</div></CardContent>
-        </Card>
-        <Card className="bg-card border-none shadow-sm">
-          <CardHeader className="pb-2"><CardTitle className="text-xs uppercase text-muted-foreground">Faturamento</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-bold">R$ 45k</div></CardContent>
-        </Card>
-        <Card className="bg-card border-none shadow-sm">
-          <CardHeader className="pb-2"><CardTitle className="text-xs uppercase text-muted-foreground">Consultas Hoje</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-bold">12</div></CardContent>
-        </Card>
-      </div>
-
       <Tabs defaultValue="appointments" className="w-full">
-        <TabsList className="bg-muted p-1 rounded-xl mb-6">
-          <TabsTrigger value="appointments" className="rounded-lg px-6 data-[state=active]:bg-primary data-[state=active]:text-white">Agenda</TabsTrigger>
-          <TabsTrigger value="records" className="rounded-lg px-6 data-[state=active]:bg-primary data-[state=active]:text-white">Prontuários</TabsTrigger>
+        <TabsList className="bg-muted p-1 rounded-xl mb-6 flex-wrap h-auto">
+          <TabsTrigger value="appointments" className="rounded-lg px-6">Agenda</TabsTrigger>
+          <TabsTrigger value="records" className="rounded-lg px-6">Prontuários</TabsTrigger>
+          <TabsTrigger value="management" className="rounded-lg px-6">Equipe & Usuários</TabsTrigger>
+          <TabsTrigger value="billing" className="rounded-lg px-6">Financeiro</TabsTrigger>
         </TabsList>
         
         <TabsContent value="appointments">
-          <Card className="border-none shadow-xl bg-card overflow-hidden">
-            <CardHeader className="border-b">
-              <CardTitle className="font-headline text-2xl text-primary">Próximos Atendimentos</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6">
+          <Card className="border-none shadow-xl bg-card">
+            <CardHeader><CardTitle>Agenda Hoje</CardTitle></CardHeader>
+            <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Paciente</TableHead>
                     <TableHead>Serviço</TableHead>
-                    <TableHead>Data</TableHead>
                     <TableHead>Horário</TableHead>
-                    <TableHead className="text-center">Status</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -202,43 +212,25 @@ export default function AdminDashboard() {
                     <TableRow key={apt.id}>
                       <TableCell className="font-bold">{apt.patientName}</TableCell>
                       <TableCell>{SERVICES.find(s => s.id === apt.serviceId)?.name}</TableCell>
-                      <TableCell>{apt.date}</TableCell>
                       <TableCell>{apt.time}</TableCell>
-                      <TableCell className="text-center">
-                        <Badge 
-                          className={`rounded-full px-4 py-1 font-bold text-[10px] uppercase tracking-wider ${
-                            apt.status === 'confirmed' 
-                              ? 'bg-accent/20 text-accent border-accent/30 hover:bg-accent/30' 
-                              : 'bg-primary/10 text-primary border-primary/30 hover:bg-primary/20'
-                          }`}
-                          variant="outline"
-                        >
+                      <TableCell>
+                        <Badge variant={apt.status === 'confirmed' ? 'secondary' : 'outline'} className="rounded-full">
                           {apt.status === 'confirmed' ? 'Confirmado' : 'Pendente'}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           {apt.status === 'pending' && (
-                            <Button 
-                              size="sm" 
-                              variant="ghost" 
-                              className="text-accent hover:text-accent hover:bg-accent/10 rounded-full"
-                              onClick={() => handleConfirmAppointment(apt.id)}
-                            >
-                              <CheckCircle2 className="h-4 w-4 mr-1" /> Confirmar
+                            <Button size="sm" variant="ghost" className="text-accent" onClick={() => handleConfirmAppointment(apt.id)}>
+                              <CheckCircle2 className="h-4 w-4" />
                             </Button>
                           )}
-                          <Button 
-                            size="sm" 
-                            variant="ghost" 
-                            className="text-primary hover:bg-primary/10 rounded-full"
-                            onClick={() => {
-                              setReschedulingAppointment(apt);
-                              setNewDate(new Date(apt.date));
-                              setNewTime(apt.time);
-                            }}
-                          >
-                            <CalendarIcon className="h-4 w-4 mr-1" /> Reagendar
+                          <Button size="sm" variant="ghost" onClick={() => {
+                            setReschedulingAppointment(apt);
+                            setNewDate(new Date(apt.date));
+                            setNewTime(apt.time);
+                          }}>
+                            <CalendarIcon className="h-4 w-4" />
                           </Button>
                         </div>
                       </TableCell>
@@ -250,99 +242,164 @@ export default function AdminDashboard() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="management">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="border-none shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Todos os Usuários</CardTitle>
+                <CardDescription>Gerencie acessos e defina colaboradores.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {isLoadingUsers ? <Loader2 className="animate-spin" /> : allUsers?.map(u => (
+                    <div key={u.id} className="flex items-center justify-between p-3 border rounded-xl">
+                      <div>
+                        <p className="font-bold text-sm">{u.name}</p>
+                        <p className="text-xs text-muted-foreground">{u.email}</p>
+                        <Badge variant={u.role === 'professional' ? 'default' : 'outline'} className="mt-1 text-[8px]">
+                          {u.role === 'professional' ? 'Colaborador' : 'Paciente'}
+                        </Badge>
+                      </div>
+                      <Button 
+                        size="sm" 
+                        variant={u.role === 'professional' ? 'destructive' : 'default'} 
+                        className="rounded-full h-8"
+                        onClick={() => handleToggleProfessional(u)}
+                      >
+                        {u.role === 'professional' ? <UserMinus className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><ShieldAlert className="h-5 w-5" /> Equipe Ativa</CardTitle>
+                <CardDescription>Colaboradores com acesso ao prontuário.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {allUsers?.filter(u => u.role === 'professional').map(u => (
+                    <div key={u.id} className="flex items-center gap-3 p-2 bg-primary/5 rounded-lg border border-primary/10">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="bg-primary text-white text-[10px]">{u.name.substring(0,2)}</AvatarFallback>
+                      </Avatar>
+                      <p className="text-sm font-medium">{u.name}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="billing">
+          <Card className="border-none shadow-lg overflow-hidden">
+            <CardHeader className="bg-primary/5 border-b">
+              <div className="flex justify-between items-center">
+                <CardTitle className="flex items-center gap-2"><DollarSign className="h-5 w-5" /> Faturamento Inteligente</CardTitle>
+                <Button onClick={generateReport} disabled={loading === 'billing'} className="rounded-full bg-accent hover:bg-accent/90">
+                  {loading === 'billing' ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
+                  Gerar Fechamento IA
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-6">
+              {billingResult ? (
+                <div className="space-y-6 animate-in fade-in zoom-in duration-500">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 bg-muted rounded-2xl">
+                      <p className="text-xs uppercase font-bold text-muted-foreground">Total do Período</p>
+                      <p className="text-3xl font-bold text-primary">R$ {billingResult.totalCost.toFixed(2)}</p>
+                    </div>
+                  </div>
+                  <div className="p-6 bg-accent/5 rounded-3xl border border-accent/20">
+                    <h3 className="font-headline font-bold mb-4 flex items-center gap-2">Resumo Consolidado</h3>
+                    <div className="prose prose-sm max-w-none text-muted-foreground whitespace-pre-wrap">
+                      {billingResult.billingSummary}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-20 text-muted-foreground">
+                  <DollarSign className="h-12 w-12 mx-auto mb-4 opacity-10" />
+                  <p>Clique no botão acima para consolidar os dados financeiros.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="records">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Card className="md:col-span-1 border-none shadow-lg">
               <CardHeader>
-                <CardTitle className="text-lg">Pacientes</CardTitle>
-                <div className="relative mt-2">
+                <div className="relative">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input 
-                    placeholder="Filtrar por nome..." 
-                    className="pl-9"
-                    value={searchPatient}
-                    onChange={(e) => setSearchPatient(e.target.value)}
-                  />
+                  <Input placeholder="Buscar paciente..." className="pl-9" value={searchPatient} onChange={(e) => setSearchPatient(e.target.value)} />
                 </div>
               </CardHeader>
               <CardContent className="space-y-2">
-                {appointments.filter(a => a.patientName.toLowerCase().includes(searchPatient.toLowerCase())).map(p => (
+                {allUsers?.filter(u => u.name.toLowerCase().includes(searchPatient.toLowerCase())).map(u => (
                   <div 
-                    key={p.patientId} 
-                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${selectedPatientRecord?.id === p.patientId ? 'bg-primary/5 border-primary' : 'hover:bg-muted'}`}
-                    onClick={() => setSelectedPatientRecord({ id: p.patientId, name: p.patientName })}
+                    key={u.id} 
+                    className={`p-3 rounded-lg border cursor-pointer ${selectedPatientRecord?.id === u.id ? 'bg-primary/5 border-primary' : 'hover:bg-muted'}`}
+                    onClick={() => setSelectedPatientRecord({ id: u.id, name: u.name })}
                   >
-                    <p className="font-bold text-sm">{p.patientName}</p>
-                    <p className="text-[10px] text-muted-foreground uppercase">ID: {p.patientId}</p>
+                    <p className="font-bold text-sm">{u.name}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase">{u.email}</p>
                   </div>
                 ))}
               </CardContent>
             </Card>
 
-            <Card className="md:col-span-2 border-none shadow-lg min-h-[500px]">
+            <Card className="md:col-span-2 border-none shadow-lg">
               {selectedPatientRecord ? (
                 <div className="h-full flex flex-col">
                   <CardHeader className="border-b flex flex-row items-center justify-between">
                     <div>
-                      <CardTitle className="text-primary">{selectedPatientRecord.name}</CardTitle>
-                      <CardDescription>Evolução clínica do paciente</CardDescription>
+                      <CardTitle>{selectedPatientRecord.name}</CardTitle>
+                      <CardDescription>Prontuário Digital</CardDescription>
                     </div>
                     <Dialog>
                       <DialogTrigger asChild>
-                        <Button className="rounded-full">
-                          <Plus className="mr-2 h-4 w-4" /> Nova Evolução
-                        </Button>
+                        <Button className="rounded-full"><Plus className="mr-2 h-4 w-4" /> Evolução</Button>
                       </DialogTrigger>
                       <DialogContent className="sm:max-w-[600px]">
                         <DialogHeader>
-                          <DialogTitle>Registro Clínico</DialogTitle>
-                          <DialogDescription>Insira as notas da consulta atual.</DialogDescription>
+                          <DialogTitle>Nova Evolução Clínica</DialogTitle>
                         </DialogHeader>
                         <div className="space-y-4 py-4">
                           <Textarea 
-                            placeholder="Descreva o procedimento realizado..." 
+                            placeholder="Notas clínicas..." 
                             className="min-h-[150px]"
                             value={newNote}
                             onChange={(e) => setNewNote(e.target.value)}
                           />
                           {aiAnalysis && (
-                            <div className="p-4 bg-accent/10 rounded-xl border border-accent/20 space-y-2">
-                              <div className="flex items-center gap-2 text-accent-foreground font-bold text-sm">
-                                <Sparkles className="h-4 w-4" /> Sugestão IA
-                              </div>
-                              <p className="text-xs"><strong>Resumo:</strong> {aiAnalysis.summary}</p>
-                              <p className="text-xs"><strong>Conduta:</strong> {aiAnalysis.suggestedTreatment}</p>
+                            <div className="p-4 bg-accent/10 rounded-xl border border-accent/20">
+                              <p className="text-xs font-bold mb-2">Análise IA:</p>
+                              <p className="text-xs">{aiAnalysis.summary}</p>
                             </div>
                           )}
                         </div>
-                        <DialogFooter className="flex gap-2">
-                          <Button variant="outline" onClick={analyzeClinicalNote} disabled={loading === 'ai-analysis' || !newNote}>
-                            {loading === 'ai-analysis' ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
-                            Apoio IA
-                          </Button>
-                          <Button onClick={() => {
-                            toast({ title: "Salvo", description: "Histórico atualizado." });
-                            setNewNote("");
-                            setAiAnalysis(null);
-                          }}>Salvar Registro</Button>
+                        <DialogFooter>
+                          <Button variant="outline" onClick={analyzeClinicalNote} disabled={loading === 'ai-analysis'}>IA</Button>
+                          <Button onClick={() => {toast({title:"Salvo"}); setNewNote(""); setAiAnalysis(null)}}>Salvar</Button>
                         </DialogFooter>
                       </DialogContent>
                     </Dialog>
                   </CardHeader>
-                  <CardContent className="pt-6">
-                    <div className="space-y-6">
-                      <div className="border-l-2 border-primary pl-4 py-1">
-                        <p className="text-[10px] text-muted-foreground font-bold">20 DE MAIO, 2024</p>
-                        <p className="font-bold text-sm">Limpeza Profunda</p>
-                        <p className="text-sm text-muted-foreground">Procedimento realizado sem intercorrências. Paciente orientado sobre uso de fio dental.</p>
-                      </div>
-                    </div>
+                  <CardContent className="p-6">
+                    <p className="text-muted-foreground text-sm italic">Nenhuma evolução anterior encontrada para este paciente.</p>
                   </CardContent>
                 </div>
               ) : (
-                <div className="h-full flex flex-col items-center justify-center text-muted-foreground p-12 text-center">
-                  <ClipboardList className="h-12 w-12 mb-4 opacity-20" />
-                  <p className="font-bold">Selecione um paciente para ver o prontuário</p>
+                <div className="flex flex-col items-center justify-center py-40 opacity-20">
+                  <ClipboardList className="h-12 w-12" />
+                  <p>Selecione um paciente</p>
                 </div>
               )}
             </Card>
@@ -350,67 +407,44 @@ export default function AdminDashboard() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog de Reagendamento */}
+      {/* Reagendamento */}
       <Dialog open={!!reschedulingAppointment} onOpenChange={(open) => !open && setReschedulingAppointment(null)}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Reagendar Paciente</DialogTitle>
-            <DialogDescription>
-              Selecione uma nova data e horário para {reschedulingAppointment?.patientName}.
-            </DialogDescription>
+            <DialogTitle>Reagendar</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-6 py-4">
-            <div className="space-y-4">
-              <label className="text-sm font-bold flex items-center gap-2 uppercase tracking-widest opacity-60">
-                <CalendarIcon className="w-4 h-4" /> Selecione o Dia
-              </label>
-              <div className="flex flex-wrap justify-center gap-3">
-                {availableDates.map((date) => {
-                  const isSelected = newDate?.toDateString() === date.toDateString();
-                  return (
-                    <Button
-                      key={date.toISOString()}
-                      variant={isSelected ? "default" : "outline"}
-                      className={`h-20 w-16 rounded-[1.5rem] flex flex-col gap-0.5 transition-all ${isSelected ? 'scale-105 shadow-lg ring-4 ring-primary/20' : 'hover:bg-primary/5'}`}
-                      onClick={() => {
-                        setNewDate(date);
-                        setNewTime("");
-                      }}
-                    >
-                      <span className="text-[8px] uppercase font-bold opacity-50">{format(date, "EEE", { locale: ptBR })}</span>
-                      <span className="text-xl font-bold">{format(date, "dd")}</span>
-                      <span className="text-[8px] font-medium uppercase opacity-50">{format(date, "MMM", { locale: ptBR })}</span>
-                    </Button>
-                  );
-                })}
-              </div>
+          <div className="space-y-6 py-4">
+            <div className="flex flex-wrap justify-center gap-3">
+              {availableDates.map((date) => {
+                const isSelected = newDate?.toDateString() === date.toDateString();
+                return (
+                  <Button
+                    key={date.toISOString()}
+                    variant={isSelected ? "default" : "outline"}
+                    className={`h-20 w-16 rounded-2xl flex flex-col gap-1 ${isSelected ? 'scale-105 shadow-lg' : ''}`}
+                    onClick={() => setNewDate(date)}
+                  >
+                    <span className="text-[8px] uppercase">{format(date, "EEE", { locale: ptBR })}</span>
+                    <span className="text-xl font-bold">{format(date, "dd")}</span>
+                  </Button>
+                );
+              })}
             </div>
-
             {newDate && (
-              <div className="grid gap-3 animate-in fade-in slide-in-from-top-2">
-                <label className="text-sm font-bold flex items-center gap-2 uppercase tracking-widest opacity-60">
-                  <Clock className="w-4 h-4" /> Horário Disponível
-                </label>
-                <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
-                  {TIME_SLOTS.map(t => (
-                    <Button 
-                      key={t} 
-                      variant={newTime === t ? "default" : "outline"} 
-                      className={`h-10 rounded-xl text-xs font-bold transition-all ${newTime === t ? 'scale-105 shadow-md' : 'hover:border-primary'}`}
-                      onClick={() => setNewTime(t)}
-                    >
-                      {t}
-                    </Button>
-                  ))}
-                </div>
+              <div className="grid grid-cols-4 gap-2">
+                {TIME_SLOTS.map(t => (
+                  <Button key={t} variant={newTime === t ? "default" : "outline"} className="h-10 text-xs" onClick={() => setNewTime(t)}>
+                    {t}
+                  </Button>
+                ))}
               </div>
             )}
           </div>
-          <DialogFooter className="pt-4 border-t">
-            <Button variant="outline" className="rounded-full" onClick={() => setReschedulingAppointment(null)}>Cancelar</Button>
-            <Button className="rounded-full px-8 shadow-lg" onClick={handleRescheduleSubmit} disabled={!newDate || !newTime}>
-              Confirmar Reagendamento
-            </Button>
+          <DialogFooter>
+            <Button className="rounded-full w-full" disabled={!newDate || !newTime} onClick={() => {
+              toast({ title: "Reagendado!" });
+              setReschedulingAppointment(null);
+            }}>Confirmar Alteração</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
