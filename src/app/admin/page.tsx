@@ -39,21 +39,28 @@ export default function AdminDashboard() {
   const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
   const isAdmin = user?.email === HARDCODED_ADMIN_EMAIL;
-  const authorityLevel = userData?.authorityLevel || 0;
-  const isProfessional = userData?.role === 'professional' || isAdmin;
+  
+  // Só define como profissional se os dados do usuário estiverem carregados ou se for o admin hardcoded
+  const isProfessional = useMemo(() => {
+    if (isAdmin) return true;
+    if (isLoadingUserData) return false;
+    return userData?.role === 'professional';
+  }, [isAdmin, isLoadingUserData, userData]);
 
-  // Apenas busca usuários se for admin ou profissional autorizado
+  const authorityLevel = userData?.authorityLevel || (isAdmin ? 4 : 0);
+
+  // Apenas busca usuários se for profissional autorizado e o carregamento inicial terminou
   const usersRef = useMemoFirebase(() => {
-    if (!user || !db || !isProfessional || isUserLoading || isLoadingUserData) return null;
+    if (!db || isUserLoading || isLoadingUserData || !isProfessional) return null;
     return collection(db, 'users');
-  }, [db, user, isProfessional, isUserLoading, isLoadingUserData]);
+  }, [db, isUserLoading, isLoadingUserData, isProfessional]);
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
 
-  // Apenas busca agendamentos se for profissional autorizado
+  // Apenas busca agendamentos se for profissional autorizado e o carregamento inicial terminou
   const apptsQuery = useMemoFirebase(() => {
-    if (!db || !user || !isProfessional || isUserLoading || isLoadingUserData) return null;
+    if (!db || isUserLoading || isLoadingUserData || !isProfessional) return null;
     return query(collection(db, 'appointments'), orderBy('date', 'asc'), orderBy('time', 'asc'));
-  }, [db, user, isProfessional, isUserLoading, isLoadingUserData]);
+  }, [db, isUserLoading, isLoadingUserData, isProfessional]);
   const { data: appointments, isLoading: isLoadingAppts } = useCollection(apptsQuery);
 
   const [loading, setLoading] = useState<string | null>(null);
@@ -102,11 +109,13 @@ export default function AdminDashboard() {
         authorityLevel: newLevel
       });
 
-      const roleRef = doc(db, 'app_roles', 'professional', 'users', targetUser.id);
-      if (newRole === 'professional') {
+      const roleRef = doc(db, 'app_roles', (newRole === 'professional' ? 'professional' : 'admin'), 'users', targetUser.id);
+      if (newLevel > 0) {
         await setDoc(roleRef, { active: true, assignedAt: new Date().toISOString() });
       } else {
-        await deleteDoc(roleRef);
+        // Se voltar a ser paciente, removemos de papéis especiais
+        await deleteDoc(doc(db, 'app_roles', 'professional', 'users', targetUser.id));
+        await deleteDoc(doc(db, 'app_roles', 'admin', 'users', targetUser.id));
       }
 
       toast({ title: "Autoridade Atualizada", description: `${targetUser.name} agora é Nível ${newLevel}.` });
@@ -159,10 +168,10 @@ export default function AdminDashboard() {
     }
   };
 
-  if (isUserLoading || isLoadingUserData) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (isUserLoading || (user && isLoadingUserData)) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!user) return null;
 
-  if (!isProfessional) {
+  if (!isProfessional && !isAdmin) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center space-y-4">
         <ShieldAlert className="h-16 w-16 text-destructive animate-bounce" />
@@ -315,7 +324,7 @@ export default function AdminDashboard() {
                         <p className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-2">
                           {lvl === 1 ? 'RECEPÇÃO' : lvl === 2 ? 'ASSISTENTE' : lvl === 3 ? 'ADMINISTRATIVO' : 'DENTISTA'}
                         </p>
-                        {allUsers?.filter(u => u.role === 'professional' && u.authorityLevel === lvl).map(u => (
+                        {allUsers?.filter(u => (u.role === 'professional' || u.role === 'admin') && u.authorityLevel === lvl).map(u => (
                           <div key={u.id} className="flex items-center gap-4 p-4 bg-white/10 rounded-2xl backdrop-blur-sm border border-white/20">
                             <Avatar className="h-10 w-10 border-2 border-white">
                               <AvatarFallback className="bg-white text-primary font-bold">{u.name.substring(0,2)}</AvatarFallback>

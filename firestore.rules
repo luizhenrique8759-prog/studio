@@ -9,21 +9,26 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() && (
-        exists(/databases/$(database)/documents/app_roles/admin/users/$(request.auth.uid)) ||
-        request.auth.token.email == "luizhenrique8759@gmail.com"
+        request.auth.token.email == "luizhenrique8759@gmail.com" ||
+        exists(/databases/$(database)/documents/app_roles/admin/users/$(request.auth.uid))
       );
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     function getAuthorityLevel() {
       let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
-      return exists(userPath) ? get(userPath).data.authorityLevel : 0;
+      return exists(userPath) ? getUserData().get('authorityLevel', 0) : 0;
     }
 
     function isProfessional() {
-      return isSignedIn() && (
+      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
+      return isAdmin() || (isSignedIn() && (
         exists(/databases/$(database)/documents/app_roles/professional/users/$(request.auth.uid)) ||
-        isAdmin()
-      );
+        (exists(userPath) && getUserData().get('role', '') == 'professional')
+      ));
     }
 
     match /users/{userId} {
@@ -34,20 +39,28 @@ service cloud.firestore {
     }
 
     match /medical_records/{recordId} {
-      allow get, list, create, update: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 2);
+      allow read, write: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 2);
     }
 
     match /app_roles/{role}/users/{userId} {
-      allow get: if isSignedIn();
+      allow read: if isSignedIn();
       allow write: if isAdmin(); 
     }
     
     match /appointments/{id} { 
-      allow read: if isSignedIn() && (
+      // Separação de list e get para maior robustez em consultas globais
+      allow list: if isSignedIn() && (
         isAdmin() || 
         (isProfessional() && getAuthorityLevel() >= 1) || 
         request.auth.uid == resource.data.patientId
       );
+      
+      allow get: if isSignedIn() && (
+        isAdmin() || 
+        (isProfessional() && getAuthorityLevel() >= 1) || 
+        request.auth.uid == resource.data.patientId
+      );
+      
       allow create: if isSignedIn();
       allow update, delete: if isSignedIn() && (isAdmin() || (isProfessional() && getAuthorityLevel() >= 1));
     }
