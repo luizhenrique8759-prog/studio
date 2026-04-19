@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -19,7 +20,7 @@ function Calendar({
     <DayPicker
       showOutsideDays={showOutsideDays}
       className={cn("p-2", className)}
-      disabled={{ dayOfWeek: [0] }} // Desabilita domingos
+      disabled={{ dayOfWeek: [0] }}
       classNames={{
         months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0 w-full justify-center",
         month: "space-y-4 w-full",
@@ -33,12 +34,11 @@ function Calendar({
         nav_button_previous: "absolute left-1",
         nav_button_next: "absolute right-1",
         table: "w-full border-collapse",
-        head_row: "flex w-full justify-between",
-        head_cell:
-          "text-muted-foreground rounded-md w-9 font-normal text-[0.7rem] text-center uppercase [&:nth-child(1)]:hidden", // Esconde domingo
-        row: "flex w-full mt-2 justify-between",
+        head_row: "flex w-full justify-center gap-1",
+        head_cell: "text-muted-foreground rounded-md w-9 font-normal text-[0.7rem] text-center uppercase [&:nth-child(1)]:hidden",
+        row: "flex w-full mt-2 justify-center gap-1",
         cell: cn(
-          "h-9 w-9 text-center text-sm p-0 relative focus-within:relative focus-within:z-20 [&:nth-child(1)]:hidden", // Esconde domingo
+          "h-9 w-9 text-center text-sm p-0 relative focus-within:relative focus-within:z-20 [&:nth-child(1)]:hidden",
           props.mode === "range"
             ? "[&:has(>.day-range-end)]:rounded-r-md [&:has(>.day-range-start)]:rounded-l-md first:[&:has(>text-foreground)]:rounded-l-md last:[&:has(>text-foreground)]:rounded-r-md"
             : "[&:has([aria-selected])]:rounded-md"
@@ -49,14 +49,11 @@ function Calendar({
         ),
         day_range_start: "day-range-start",
         day_range_end: "day-range-end",
-        day_selected:
-          "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground font-bold",
+        day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground font-bold",
         day_today: "bg-accent/20 text-accent-foreground font-bold border border-accent/20",
-        day_outside:
-          "day-outside text-muted-foreground opacity-30 aria-selected:bg-accent/50 aria-selected:text-muted-foreground",
+        day_outside: "day-outside text-muted-foreground opacity-30 aria-selected:bg-accent/50 aria-selected:text-muted-foreground",
         day_disabled: "text-muted-foreground opacity-20 pointer-events-none",
-        day_range_middle:
-          "aria-selected:bg-accent aria-selected:text-accent-foreground",
+        day_range_middle: "aria-selected:bg-accent aria-selected:text-accent-foreground",
         day_hidden: "invisible",
         ...classNames,
       }}

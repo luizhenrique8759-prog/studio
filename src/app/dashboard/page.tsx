@@ -1,22 +1,30 @@
+
 "use client";
 
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MOCK_APPOINTMENTS, SERVICES, PROFESSIONALS } from "@/lib/mock-data";
-import { Calendar as CalendarIcon, Clock, User, Stethoscope, ChevronRight, Settings, LogOut, Bell } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, User, Stethoscope, ChevronRight, Settings, LogOut, Bell, Loader2 } from "lucide-react";
 import Link from 'next/link';
-import { useAuth } from '@/firebase';
+import { useAuth, useUser } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { useToast } from "@/hooks/use-toast";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function PatientDashboard() {
-  const [userAppointments] = useState(MOCK_APPOINTMENTS.filter(a => a.patientId === 'u1'));
+  const { user, isUserLoading } = useUser();
   const auth = useAuth();
   const router = useRouter();
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (!isUserLoading && !user) {
+      router.push('/auth');
+    }
+  }, [user, isUserLoading, router]);
 
   const handleLogout = async () => {
     if (!auth) return;
@@ -36,9 +44,21 @@ export default function PatientDashboard() {
     }
   };
 
+  if (isUserLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) return null;
+
+  const userAppointments = MOCK_APPOINTMENTS.filter(a => a.patientId === 'u1'); // Mantendo mock por enquanto
+  const userInitials = user.displayName?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Dashboard Nav */}
       <nav className="border-b bg-white/50 backdrop-blur-sm sticky top-0 z-40">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
@@ -49,7 +69,10 @@ export default function PatientDashboard() {
           </Link>
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" className="rounded-full"><Bell className="h-5 w-5" /></Button>
-            <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white font-bold">JO</div>
+            <Avatar className="h-8 w-8 border">
+              <AvatarImage src={user.photoURL || undefined} />
+              <AvatarFallback className="bg-accent text-white font-bold">{userInitials}</AvatarFallback>
+            </Avatar>
           </div>
         </div>
       </nav>
@@ -57,8 +80,8 @@ export default function PatientDashboard() {
       <main className="container mx-auto p-4 md:p-8 space-y-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-headline font-bold">Olá, João Oliveira!</h1>
-            <p className="text-muted-foreground">Gerencie sua saúde bucal em um só lugar.</p>
+            <h1 className="text-3xl font-headline font-bold text-primary">Olá, {user.displayName || 'Paciente'}!</h1>
+            <p className="text-muted-foreground">{user.email}</p>
           </div>
           <Button asChild className="rounded-full px-6 shadow-lg shadow-primary/20">
             <Link href="/booking">Agendar Nova Consulta</Link>
@@ -77,7 +100,7 @@ export default function PatientDashboard() {
                   const prof = PROFESSIONALS.find(p => p.id === apt.professionalId);
                   const service = SERVICES.find(s => s.id === apt.serviceId);
                   return (
-                    <Card key={apt.id} className="overflow-hidden hover:shadow-md transition-shadow">
+                    <Card key={apt.id} className="overflow-hidden hover:shadow-md transition-shadow border-none shadow-sm">
                       <div className="flex flex-col md:flex-row">
                         <div className="p-6 flex-1 space-y-4">
                           <div className="flex justify-between items-start">
@@ -132,21 +155,21 @@ export default function PatientDashboard() {
                Ações Rápidas
             </h2>
             <div className="grid gap-4">
-              <Card className="cursor-pointer hover:bg-primary/5 transition-colors border-l-4 border-l-primary">
+              <Card className="cursor-pointer hover:bg-primary/5 transition-colors border-l-4 border-l-primary shadow-sm border-none">
                 <CardHeader className="p-4">
                   <CardTitle className="text-md flex items-center justify-between">
                     Perfil Completo <ChevronRight className="w-4 h-4" />
                   </CardTitle>
                 </CardHeader>
               </Card>
-              <Card className="cursor-pointer hover:bg-accent/5 transition-colors border-l-4 border-l-accent">
+              <Card className="cursor-pointer hover:bg-accent/5 transition-colors border-l-4 border-l-accent shadow-sm border-none">
                 <CardHeader className="p-4">
                   <CardTitle className="text-md flex items-center justify-between">
                     Histórico Médico <ChevronRight className="w-4 h-4" />
                   </CardTitle>
                 </CardHeader>
               </Card>
-              <Card className="cursor-pointer hover:bg-secondary transition-colors border-l-4 border-l-secondary-foreground">
+              <Card className="cursor-pointer hover:bg-secondary transition-colors border-l-4 border-l-secondary-foreground shadow-sm border-none">
                 <CardHeader className="p-4">
                   <CardTitle className="text-md flex items-center justify-between">
                     Financeiro & Recibos <ChevronRight className="w-4 h-4" />
@@ -155,21 +178,21 @@ export default function PatientDashboard() {
               </Card>
             </div>
 
-            <Card className="bg-primary text-primary-foreground overflow-hidden">
+            <Card className="bg-primary text-primary-foreground overflow-hidden border-none shadow-xl">
                <CardHeader>
                   <CardTitle className="font-headline">Clube Sync+</CardTitle>
                   <CardDescription className="text-primary-foreground/80">Descontos exclusivos em procedimentos estéticos.</CardDescription>
                </CardHeader>
                <CardFooter>
-                  <Button variant="secondary" className="w-full rounded-full">Saiba Mais</Button>
+                  <Button variant="secondary" className="w-full rounded-full font-bold">Saiba Mais</Button>
                </CardFooter>
             </Card>
 
             <div className="pt-4 border-t flex flex-col gap-2">
-               <Button variant="ghost" className="justify-start"><Settings className="mr-2 h-4 w-4" /> Configurações</Button>
+               <Button variant="ghost" className="justify-start rounded-xl"><Settings className="mr-2 h-4 w-4" /> Configurações</Button>
                <Button 
                 variant="ghost" 
-                className="justify-start text-destructive hover:text-destructive"
+                className="justify-start text-destructive hover:text-destructive rounded-xl"
                 onClick={handleLogout}
                >
                 <LogOut className="mr-2 h-4 w-4" /> Sair

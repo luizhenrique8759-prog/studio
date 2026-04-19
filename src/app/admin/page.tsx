@@ -1,26 +1,35 @@
+
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MOCK_APPOINTMENTS, SERVICES, PROFESSIONALS, Appointment } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Calendar, Users, DollarSign, FileText, Bell, CheckCircle2, Clock, Stethoscope, MessageSquare, Sparkles, LogOut } from "lucide-react";
+import { Calendar, Users, DollarSign, FileText, Bell, CheckCircle2, Clock, Stethoscope, MessageSquare, Sparkles, LogOut, Loader2, CircleX } from "lucide-react";
 import { generateBillingSummary } from "@/ai/flows/generate-billing-summary";
 import { generateAppointmentNotification } from "@/ai/flows/generate-appointment-notification";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from '@/firebase';
+import { useAuth, useUser } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function AdminDashboard() {
   const { toast } = useToast();
   const auth = useAuth();
+  const { user, isUserLoading } = useUser();
   const router = useRouter();
   const [appointments, setAppointments] = useState<Appointment[]>(MOCK_APPOINTMENTS);
   const [loading, setLoading] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isUserLoading && !user) {
+      router.push('/auth');
+    }
+  }, [user, isUserLoading, router]);
 
   const handleLogout = async () => {
     if (!auth) return;
@@ -97,61 +106,87 @@ export default function AdminDashboard() {
     }
   };
 
+  if (isUserLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) return null;
+
+  const adminInitials = user.displayName?.substring(0, 2).toUpperCase() || 'AD';
+
   return (
     <div className="p-4 md:p-8 space-y-8 bg-background min-h-screen animate-in fade-in duration-700">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-4xl font-headline font-bold text-primary">Painel Administrativo</h1>
-          <p className="text-muted-foreground">Gestão completa da Clínica Dental Sync</p>
+        <div className="flex items-center gap-4">
+          <Avatar className="h-12 w-12 border-2 border-primary">
+            <AvatarImage src={user.photoURL || undefined} />
+            <AvatarFallback className="bg-primary text-white font-bold">{adminInitials}</AvatarFallback>
+          </Avatar>
+          <div>
+            <h1 className="text-4xl font-headline font-bold text-primary">Painel Administrativo</h1>
+            <p className="text-muted-foreground">Logado como: {user.displayName}</p>
+          </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="rounded-full"><Bell className="mr-2 h-4 w-4" /> Notificações</Button>
           <Button variant="ghost" className="rounded-full text-destructive" onClick={handleLogout}>
             <LogOut className="mr-2 h-4 w-4" /> Sair
           </Button>
-          <Button className="rounded-full px-6">+ Novo Agendamento</Button>
+          <Button className="rounded-full px-6 shadow-lg shadow-primary/20">+ Novo Agendamento</Button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="border-l-4 border-l-primary shadow-sm hover:shadow-md transition-shadow">
+        <Card className="border-none shadow-sm hover:shadow-md transition-shadow bg-card/50">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium uppercase tracking-wider">Agendamentos Hoje</CardTitle>
-            <Calendar className="w-4 h-4 text-primary" />
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Agendamentos Hoje</CardTitle>
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <Calendar className="w-4 h-4 text-primary" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">12</div>
-            <p className="text-xs text-muted-foreground font-medium">+2 em relação a ontem</p>
+            <div className="text-3xl font-bold">12</div>
+            <p className="text-xs text-muted-foreground mt-1">Sincronizado em tempo real</p>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-accent shadow-sm hover:shadow-md transition-shadow">
+        <Card className="border-none shadow-sm hover:shadow-md transition-shadow bg-card/50">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium uppercase tracking-wider">Novos Pacientes</CardTitle>
-            <Users className="w-4 h-4 text-accent" />
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Novos Pacientes</CardTitle>
+            <div className="p-2 bg-accent/10 rounded-lg">
+              <Users className="w-4 h-4 text-accent" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">48</div>
-            <p className="text-xs text-muted-foreground font-medium">+12% este mês</p>
+            <div className="text-3xl font-bold">48</div>
+            <p className="text-xs text-muted-foreground mt-1">+12% este mês</p>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-secondary-foreground shadow-sm hover:shadow-md transition-shadow">
+        <Card className="border-none shadow-sm hover:shadow-md transition-shadow bg-card/50">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium uppercase tracking-wider">Faturamento Estimado</CardTitle>
-            <DollarSign className="w-4 h-4 text-secondary-foreground" />
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Faturamento</CardTitle>
+            <div className="p-2 bg-secondary/80 rounded-lg">
+              <DollarSign className="w-4 h-4 text-secondary-foreground" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">R$ 12.450</div>
-            <p className="text-xs text-muted-foreground font-medium">+5% em relação ao mês anterior</p>
+            <div className="text-3xl font-bold">R$ 12.450</div>
+            <p className="text-xs text-muted-foreground mt-1">Meta mensal: 85%</p>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-destructive shadow-sm hover:shadow-md transition-shadow">
+        <Card className="border-none shadow-sm hover:shadow-md transition-shadow bg-card/50">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium uppercase tracking-wider">Pendentes</CardTitle>
-            <Clock className="w-4 h-4 text-destructive" />
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Pendentes</CardTitle>
+            <div className="p-2 bg-destructive/10 rounded-lg">
+              <Clock className="w-4 h-4 text-destructive" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">3</div>
-            <p className="text-xs text-muted-foreground font-medium">Aguardando confirmação manual</p>
+            <div className="text-3xl font-bold">3</div>
+            <p className="text-xs text-muted-foreground mt-1">Aguardando confirmação manual</p>
           </CardContent>
         </Card>
       </div>
@@ -164,21 +199,21 @@ export default function AdminDashboard() {
         </TabsList>
         
         <TabsContent value="appointments" className="animate-in fade-in zoom-in-95 duration-300">
-          <Card className="border-none shadow-xl bg-card/50 backdrop-blur-sm">
-            <CardHeader className="border-b">
-              <CardTitle className="font-headline text-2xl">Gestão de Consultas</CardTitle>
+          <Card className="border-none shadow-xl bg-card/50 backdrop-blur-sm overflow-hidden">
+            <CardHeader className="border-b bg-muted/30">
+              <CardTitle className="font-headline text-2xl text-primary">Gestão de Consultas</CardTitle>
               <CardDescription>Visualize e confirme os agendamentos realizados pelos usuários.</CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
               <Table>
                 <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="font-bold">Paciente</TableHead>
-                    <TableHead className="font-bold">Profissional</TableHead>
-                    <TableHead className="font-bold">Serviço</TableHead>
-                    <TableHead className="font-bold">Data/Hora</TableHead>
-                    <TableHead className="font-bold">Status</TableHead>
-                    <TableHead className="text-right font-bold">Ações</TableHead>
+                  <TableRow className="hover:bg-transparent border-none">
+                    <TableHead className="font-bold text-primary">Paciente</TableHead>
+                    <TableHead className="font-bold text-primary">Profissional</TableHead>
+                    <TableHead className="font-bold text-primary">Serviço</TableHead>
+                    <TableHead className="font-bold text-primary">Data/Hora</TableHead>
+                    <TableHead className="font-bold text-primary">Status</TableHead>
+                    <TableHead className="text-right font-bold text-primary">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -186,7 +221,7 @@ export default function AdminDashboard() {
                     const prof = PROFESSIONALS.find(p => p.id === apt.professionalId);
                     const service = SERVICES.find(s => s.id === apt.serviceId);
                     return (
-                      <TableRow key={apt.id} className="group transition-colors">
+                      <TableRow key={apt.id} className="group transition-colors border-muted/20">
                         <TableCell className="font-bold">{apt.patientName}</TableCell>
                         <TableCell className="text-muted-foreground">{prof?.name}</TableCell>
                         <TableCell>
@@ -206,7 +241,7 @@ export default function AdminDashboard() {
                             <Button 
                               size="sm" 
                               variant="default" 
-                              className="bg-accent hover:bg-accent/90 rounded-full h-8 px-4"
+                              className="bg-accent hover:bg-accent/90 rounded-full h-8 px-4 font-bold"
                               onClick={() => confirmAppointment(apt)}
                               disabled={loading === apt.id}
                             >
@@ -217,7 +252,7 @@ export default function AdminDashboard() {
                           <Button 
                             size="sm" 
                             variant="outline"
-                            className="rounded-full h-8 px-4"
+                            className="rounded-full h-8 px-4 border-primary text-primary hover:bg-primary/10 font-bold"
                             onClick={() => generateInvoice(apt)}
                             disabled={loading === `billing-${apt.id}`}
                           >
@@ -236,15 +271,15 @@ export default function AdminDashboard() {
 
         <TabsContent value="professionals" className="animate-in fade-in zoom-in-95 duration-300">
            <Card className="border-none shadow-xl">
-            <CardHeader className="border-b">
+            <CardHeader className="border-b bg-muted/30">
               <CardTitle className="font-headline text-2xl text-primary">Equipe Odontológica</CardTitle>
               <CardDescription>Gerencie as contas e especialidades dos dentistas da clínica.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-6">
               {PROFESSIONALS.map(p => (
-                <div key={p.id} className="flex items-center gap-4 p-5 border rounded-2xl hover:bg-primary/5 hover:border-primary/20 transition-all group cursor-default">
+                <div key={p.id} className="flex items-center gap-4 p-5 border rounded-2xl hover:bg-primary/5 hover:border-primary/20 transition-all group cursor-default shadow-sm">
                   <div className="relative">
-                    <img src={p.imageUrl} className="w-16 h-16 rounded-full border-2 border-primary/20 group-hover:scale-105 transition-transform" alt={p.name} />
+                    <img src={p.imageUrl} className="w-16 h-16 rounded-full border-2 border-primary/20 group-hover:scale-105 transition-transform object-cover" alt={p.name} />
                     <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
                   </div>
                   <div>
@@ -261,7 +296,7 @@ export default function AdminDashboard() {
         <TabsContent value="billing" className="animate-in fade-in zoom-in-95 duration-300">
            <Card className="border-none shadow-xl bg-gradient-to-br from-card to-primary/5">
             <CardHeader className="border-b">
-              <CardTitle className="font-headline flex items-center gap-2 text-2xl">
+              <CardTitle className="font-headline flex items-center gap-2 text-2xl text-primary">
                 <Sparkles className="text-accent animate-pulse" /> Assistente de Faturamento IA
               </CardTitle>
               <CardDescription>Utilize inteligência artificial para gerar relatórios e resumos de cobrança automáticos.</CardDescription>
@@ -272,7 +307,7 @@ export default function AdminDashboard() {
                     <MessageSquare className="w-5 h-5" /> Inteligência Analítica
                   </h4>
                   <p className="text-sm text-muted-foreground leading-relaxed">
-                    O assistente processa dados de procedimentos complexos e gera descrições simplificadas para o faturamento. 
+                    O assistente processa dados de procedimentos complexos e gera descrições simplificadas para o faturamento. O resumo gerado pode ser enviado diretamente para o email do paciente.
                   </p>
                </div>
             </CardContent>
