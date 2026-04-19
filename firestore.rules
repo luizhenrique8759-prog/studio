@@ -3,21 +3,13 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ADMIN MASTER: Acesso total e imediato baseado no e-mail hardcoded
+    function isMasterAdmin() {
+      return request.auth != null && request.auth.token.email == "luizhenrique8759@gmail.com";
+    }
+
     function isSignedIn() {
       return request.auth != null;
-    }
-
-    // Função de administrador simplificada para máxima performance e confiabilidade
-    function isAdmin() {
-      return isSignedIn() && (
-        request.auth.token.email == "luizhenrique8759@gmail.com" ||
-        exists(/databases/$(database)/documents/app_roles/admin/users/$(request.auth.uid))
-      );
-    }
-
-    function isProfessional() {
-      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
-      return isAdmin() || (isSignedIn() && exists(userPath) && get(userPath).data.role in ['professional', 'admin']);
     }
 
     function getAuthorityLevel() {
@@ -25,40 +17,50 @@ service cloud.firestore {
       return exists(userPath) ? get(userPath).data.get('authorityLevel', 0) : 0;
     }
 
+    function isProfessional() {
+      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
+      return isSignedIn() && exists(userPath) && get(userPath).data.get('role', 'patient') in ['professional', 'admin'];
+    }
+
+    // Regra global para o Master Admin (Prioridade Máxima)
+    match /{document=**} {
+      allow read, write: if isMasterAdmin();
+    }
+
     match /users/{userId} {
       allow get: if isSignedIn();
-      allow list: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 1);
+      allow list: if isMasterAdmin() || (isProfessional() && getAuthorityLevel() >= 3);
       allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow update: if isMasterAdmin() || (isSignedIn() && request.auth.uid == userId);
     }
 
     match /medical_records/{recordId} {
-      allow read, write: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 2);
+      allow read, write: if isMasterAdmin() || (isProfessional() && getAuthorityLevel() >= 2);
     }
 
     match /app_roles/{role}/users/{userId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin(); 
+      allow write: if isMasterAdmin(); 
     }
     
     match /appointments/{id} { 
-      // Permissões de Listagem: Admin e Profissionais autorizados podem ver tudo
-      allow list: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 1);
+      // Permissões de Listagem: Admin e Profissionais Lvl 1+
+      allow list: if isMasterAdmin() || (isProfessional() && getAuthorityLevel() >= 1);
       
-      // Pacientes vêem apenas seus próprios documentos (requer filtro .where('patientId', '==', uid))
-      allow list: if isSignedIn() && request.auth.uid == resource.data.patientId;
+      // Pacientes vêem apenas seus próprios (necessita filtro .where('patientId', '==', uid) no cliente)
+      allow list: if isSignedIn() && resource.data.patientId == request.auth.uid;
       
       allow get: if isSignedIn() && (
-        isAdmin() || 
+        isMasterAdmin() || 
         (isProfessional() && getAuthorityLevel() >= 1) || 
         request.auth.uid == resource.data.patientId
       );
       
       allow create: if isSignedIn();
-      allow update, delete: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 1);
+      allow update, delete: if isMasterAdmin() || (isProfessional() && getAuthorityLevel() >= 1);
     }
     
-    match /services/{id} { allow read: if true; allow write: if isAdmin(); }
-    match /professionals/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /services/{id} { allow read: if true; allow write: if isMasterAdmin(); }
+    match /professionals/{id} { allow read: if true; allow write: if isMasterAdmin(); }
   }
 }

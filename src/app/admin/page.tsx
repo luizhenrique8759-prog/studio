@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SERVICES, Appointment, TIME_SLOTS } from "@/lib/mock-data";
+import { SERVICES, TIME_SLOTS } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, CheckCircle2, Calendar as CalendarIcon, Clock, Users, DollarSign, Shield, Stethoscope, Activity, UserCog } from "lucide-react";
 import { generateClinicalSummary } from "@/ai/flows/generate-clinical-summary";
@@ -32,7 +32,7 @@ export default function AdminDashboard() {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
 
-  const isAdmin = user?.email === HARDCODED_ADMIN_EMAIL;
+  const isMasterAdmin = user?.email === HARDCODED_ADMIN_EMAIL;
 
   const userDocRef = useMemoFirebase(() => {
     if (!user || !db) return null;
@@ -42,28 +42,30 @@ export default function AdminDashboard() {
   const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
   const isProfessional = useMemo(() => {
-    if (isAdmin) return true;
+    if (isMasterAdmin) return true;
     if (isLoadingUserData) return false;
     return userData?.role === 'professional' || userData?.role === 'admin';
-  }, [isAdmin, isLoadingUserData, userData]);
+  }, [isMasterAdmin, isLoadingUserData, userData]);
 
   const authorityLevel = useMemo(() => {
-    if (isAdmin) return 4;
+    if (isMasterAdmin) return 4;
     return userData?.authorityLevel || 0;
-  }, [isAdmin, userData]);
+  }, [isMasterAdmin, userData]);
 
-  // Sincronização: Aguarda o carregamento do perfil para evitar erro de permissão
+  // Consultas estabilizadas: só rodam quando o perfil está confirmado
+  const shouldFetchData = !isUserLoading && !isLoadingUserData && isProfessional;
+
   const usersRef = useMemoFirebase(() => {
-    if (!db || isUserLoading || isLoadingUserData || !isProfessional) return null;
+    if (!db || !shouldFetchData) return null;
     return query(collection(db, 'users'), orderBy('name', 'asc'));
-  }, [db, isUserLoading, isLoadingUserData, isProfessional]);
+  }, [db, shouldFetchData]);
   
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
 
   const apptsQuery = useMemoFirebase(() => {
-    if (!db || isUserLoading || isLoadingUserData || !isProfessional) return null;
+    if (!db || !shouldFetchData) return null;
     return query(collection(db, 'appointments'), orderBy('date', 'asc'));
-  }, [db, isUserLoading, isLoadingUserData, isProfessional]);
+  }, [db, shouldFetchData]);
   
   const { data: appointments, isLoading: isLoadingAppts } = useCollection(apptsQuery);
 
@@ -79,15 +81,14 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (!isUserLoading && !user) {
-      router.push('/');
+      router.push('/auth');
     }
   }, [user, isUserLoading, router]);
 
-  const canViewRecords = isAdmin || authorityLevel >= 2;
-  const canUseIA = isAdmin || authorityLevel >= 4; 
-  const canViewManagement = isAdmin || authorityLevel >= 3;
-  const canViewFinance = isAdmin || authorityLevel >= 3;
-  const canEditRoles = isAdmin;
+  const canViewRecords = isMasterAdmin || authorityLevel >= 2;
+  const canUseIA = isMasterAdmin || authorityLevel >= 4; 
+  const canViewManagement = isMasterAdmin || authorityLevel >= 3;
+  const canViewFinance = isMasterAdmin || authorityLevel >= 3;
 
   const handleLogout = async () => {
     if (!auth) return;
@@ -101,7 +102,7 @@ export default function AdminDashboard() {
   };
 
   const handleToggleProfessional = async (targetUser: any, level: string) => {
-    if (!db || !isAdmin) return;
+    if (!db || !isMasterAdmin) return;
     const newLevel = parseInt(level);
     const newRole = newLevel === 0 ? 'patient' : (newLevel === 3 ? 'admin' : 'professional');
     
@@ -109,9 +110,11 @@ export default function AdminDashboard() {
       const userRef = doc(db, 'users', targetUser.id);
       await updateDoc(userRef, { 
         role: newRole,
-        authorityLevel: newLevel
+        authorityLevel: newLevel,
+        updatedAt: new Date().toISOString()
       });
 
+      // Sincronizar papéis na coleção de segurança
       const profRoleRef = doc(db, 'app_roles', 'professional', 'users', targetUser.id);
       const adminRoleRef = doc(db, 'app_roles', 'admin', 'users', targetUser.id);
 
@@ -129,7 +132,7 @@ export default function AdminDashboard() {
 
       toast({ title: "Autoridade Atualizada", description: `${targetUser.name} agora é Nível ${newLevel}.` });
     } catch (error) {
-      toast({ variant: "destructive", title: "Erro ao atualizar" });
+      toast({ variant: "destructive", title: "Erro ao atualizar privilégios" });
     }
   };
 
@@ -177,16 +180,16 @@ export default function AdminDashboard() {
     }
   };
 
-  if (isUserLoading || isLoadingUserData) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (isUserLoading || isLoadingUserData) return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!user) return null;
 
-  if (!isProfessional && !isAdmin) {
+  if (!isProfessional && !isMasterAdmin) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center space-y-4">
-        <ShieldAlert className="h-16 w-16 text-destructive animate-bounce" />
+        <ShieldAlert className="h-16 w-16 text-destructive" />
         <h1 className="text-2xl font-bold">Acesso Restrito</h1>
-        <p className="text-muted-foreground max-w-md">Esta área é exclusiva para profissionais autorizados.</p>
-        <Button onClick={handleLogout}>Sair</Button>
+        <p className="text-muted-foreground">Esta área é exclusiva para profissionais autorizados pela clínica.</p>
+        <Button onClick={handleLogout}>Voltar</Button>
       </div>
     );
   }
@@ -195,20 +198,22 @@ export default function AdminDashboard() {
     <div className="p-4 md:p-8 space-y-8 bg-background min-h-screen">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-center gap-4">
-          <Avatar className={`h-14 w-14 border-4 ${isAdmin ? 'border-primary shadow-primary/20' : 'border-accent shadow-accent/20'}`}>
+          <Avatar className={`h-14 w-14 border-4 ${isMasterAdmin ? 'border-primary shadow-lg' : 'border-accent'}`}>
             <AvatarImage src={user.photoURL || undefined} />
-            <AvatarFallback className={`${isAdmin ? 'bg-primary' : 'bg-accent'} text-white font-bold text-xl`}>{user.displayName?.substring(0,2).toUpperCase()}</AvatarFallback>
+            <AvatarFallback className={`${isMasterAdmin ? 'bg-primary' : 'bg-accent'} text-white font-bold text-xl`}>
+              {user.displayName?.substring(0,2).toUpperCase() || 'AD'}
+            </AvatarFallback>
           </Avatar>
           <div>
             <h1 className="text-4xl font-headline font-bold text-primary tracking-tight">
-              Portal {isAdmin ? 'Administrador' : `Colaborador (Lvl ${authorityLevel})`}
+              Portal {isMasterAdmin ? 'Administrador' : `Colaborador (Nível ${authorityLevel})`}
             </h1>
             <p className="text-muted-foreground flex items-center gap-2 font-medium">
-              {isAdmin ? <Shield className="h-4 w-4 text-primary fill-primary/20" /> : <UserCog className="h-4 w-4" />} {user.email}
+              {isMasterAdmin ? <Shield className="h-4 w-4 text-primary" /> : <UserCog className="h-4 w-4" />} {user.email}
             </p>
           </div>
         </div>
-        <Button variant="outline" className="rounded-full text-destructive border-destructive hover:bg-destructive/10 px-8" onClick={handleLogout}>
+        <Button variant="outline" className="rounded-full text-destructive border-destructive" onClick={handleLogout}>
           <LogOut className="mr-2 h-4 w-4" /> Sair
         </Button>
       </div>
@@ -217,13 +222,13 @@ export default function AdminDashboard() {
         <TabsList className="bg-muted/50 p-1.5 rounded-2xl mb-8 flex-wrap h-auto border">
           <TabsTrigger value="appointments" className="rounded-xl px-8 data-[state=active]:bg-white data-[state=active]:shadow-sm">Agenda</TabsTrigger>
           {canViewRecords && <TabsTrigger value="records" className="rounded-xl px-8 data-[state=active]:bg-white data-[state=active]:shadow-sm">Prontuários</TabsTrigger>}
-          {canViewManagement && <TabsTrigger value="management" className="rounded-xl px-8 data-[state=active]:bg-primary data-[state=active]:text-white">Equipe & Usuários</TabsTrigger>}
+          {canViewManagement && <TabsTrigger value="management" className="rounded-xl px-8 data-[state=active]:bg-primary data-[state=active]:text-white">Equipe</TabsTrigger>}
           {canViewFinance && <TabsTrigger value="billing" className="rounded-xl px-8 data-[state=active]:bg-primary data-[state=active]:text-white">Financeiro</TabsTrigger>}
         </TabsList>
         
         <TabsContent value="appointments">
           <Card className="border-none shadow-2xl bg-card rounded-[2rem] overflow-hidden">
-            <CardHeader className="bg-muted/20 border-b"><CardTitle>Próximos Atendimentos</CardTitle></CardHeader>
+            <CardHeader className="bg-muted/20 border-b"><CardTitle>Atendimentos Sincronizados</CardTitle></CardHeader>
             <CardContent className="p-0">
               {isLoadingAppts ? (
                 <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary" /></div>
@@ -242,7 +247,7 @@ export default function AdminDashboard() {
                     {appointments?.map((apt) => (
                       <TableRow key={apt.id} className="hover:bg-muted/5 transition-colors">
                         <TableCell className="font-bold pl-8 text-lg">{apt.patientName}</TableCell>
-                        <TableCell>{apt.serviceName || SERVICES.find(s => s.id === apt.serviceId)?.name}</TableCell>
+                        <TableCell>{apt.serviceName}</TableCell>
                         <TableCell className="font-medium text-primary">{apt.time}</TableCell>
                         <TableCell>
                           <Badge variant={apt.status === 'confirmed' ? 'secondary' : 'outline'} className="rounded-full px-4 py-1 text-[10px] uppercase font-bold tracking-wider">
@@ -267,7 +272,7 @@ export default function AdminDashboard() {
                         </TableCell>
                       </TableRow>
                     ))}
-                    {!isLoadingAppts && appointments?.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">Nenhum agendamento encontrado.</TableCell></TableRow>}
+                    {!isLoadingAppts && appointments?.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">Nenhum agendamento ativo.</TableCell></TableRow>}
                   </TableBody>
                 </Table>
               )}
@@ -277,138 +282,67 @@ export default function AdminDashboard() {
 
         {canViewManagement && (
           <TabsContent value="management">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <Card className="border-none shadow-2xl rounded-[2rem]">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-3 text-2xl"><Users className="h-6 w-6 text-primary" /> Gestão de Usuários</CardTitle>
-                  <CardDescription>Atribua níveis de autoridade para novos colaboradores.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {isLoadingUsers ? <Loader2 className="animate-spin" /> : allUsers?.map(u => (
-                      <div key={u.id} className="flex items-center justify-between p-4 border rounded-[1.5rem] hover:bg-muted/5 transition-colors">
-                        <div className="flex items-center gap-4">
-                          <Avatar className="h-10 w-10">
-                            <AvatarFallback className="bg-primary/10 text-primary font-bold">{u.name.substring(0,2)}</AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-bold">{u.name}</p>
-                            <p className="text-xs text-muted-foreground">{u.email}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <Badge variant={u.role === 'professional' || u.role === 'admin' ? 'default' : 'outline'} className="text-[8px] h-4">
-                                {u.role === 'professional' || u.role === 'admin' ? `LVL ${u.authorityLevel}` : 'PACIENTE'}
-                              </Badge>
-                            </div>
-                          </div>
+            <Card className="border-none shadow-2xl rounded-[2rem]">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-3 text-2xl"><Users className="h-6 w-6 text-primary" /> Gestão de Colaboradores</CardTitle>
+                <CardDescription>Defina o nível de acesso para cada profissional da clínica.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {isLoadingUsers ? <Loader2 className="animate-spin text-primary" /> : allUsers?.map(u => (
+                    <div key={u.id} className="p-6 border rounded-[2rem] hover:shadow-lg transition-all space-y-4">
+                      <div className="flex items-center gap-4">
+                        <Avatar className="h-12 w-12">
+                          <AvatarFallback className="bg-primary/10 text-primary font-bold">{u.name.substring(0,2).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-bold">{u.name}</p>
+                          <p className="text-xs text-muted-foreground truncate max-w-[150px]">{u.email}</p>
                         </div>
-                        {canEditRoles && u.email !== HARDCODED_ADMIN_EMAIL && (
-                          <Select defaultValue={u.authorityLevel?.toString() || "0"} onValueChange={(val) => handleToggleProfessional(u, val)}>
-                            <SelectTrigger className="w-[140px] rounded-full text-xs">
-                              <SelectValue placeholder="Nível" />
-                            </SelectTrigger>
-                            <SelectContent className="rounded-xl">
-                              <SelectItem value="0">Paciente</SelectItem>
-                              <SelectItem value="1">Lvl 1 - Recepção</SelectItem>
-                              <SelectItem value="2">Lvl 2 - Assistente</SelectItem>
-                              <SelectItem value="3">Lvl 3 - Administrativo</SelectItem>
-                              <SelectItem value="4">Lvl 4 - Dentista</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        )}
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-none shadow-2xl rounded-[2rem] bg-primary text-white">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-3 text-2xl"><ShieldAlert className="h-6 w-6" /> Equipe Ativa</CardTitle>
-                  <CardDescription className="text-white/70">Visualização de colaboradores por nível.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-6">
-                    {[1, 2, 3, 4].map(lvl => (
-                      <div key={lvl} className="space-y-2">
-                        <p className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-2">
-                          {lvl === 1 ? 'RECEPÇÃO' : lvl === 2 ? 'ASSISTENTE' : lvl === 3 ? 'ADMINISTRATIVO' : 'DENTISTA'}
-                        </p>
-                        {allUsers?.filter(u => (u.role === 'professional' || u.role === 'admin') && u.authorityLevel === lvl).map(u => (
-                          <div key={u.id} className="flex items-center gap-4 p-4 bg-white/10 rounded-2xl backdrop-blur-sm border border-white/20">
-                            <Avatar className="h-10 w-10 border-2 border-white">
-                              <AvatarFallback className="bg-white text-primary font-bold">{u.name.substring(0,2)}</AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <p className="font-bold">{u.name}</p>
-                              <p className="text-xs opacity-70">Autoridade Nível {lvl}</p>
-                            </div>
-                          </div>
-                        ))}
+                      <div className="space-y-2 pt-2 border-t">
+                        <p className="text-[10px] font-black uppercase text-muted-foreground">Nível de Autoridade</p>
+                        <Select 
+                          defaultValue={u.authorityLevel?.toString() || "0"} 
+                          onValueChange={(val) => handleToggleProfessional(u, val)}
+                          disabled={!isMasterAdmin || u.email === HARDCODED_ADMIN_EMAIL}
+                        >
+                          <SelectTrigger className="rounded-xl">
+                            <SelectValue placeholder="Nível" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-xl">
+                            <SelectItem value="0">Paciente</SelectItem>
+                            <SelectItem value="1">Nível 1 - Recepção</SelectItem>
+                            <SelectItem value="2">Nível 2 - Auxiliar</SelectItem>
+                            <SelectItem value="3">Nível 3 - Administrativo</SelectItem>
+                            <SelectItem value="4">Nível 4 - Dentista</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         )}
 
         {canViewFinance && (
           <TabsContent value="billing">
-            <Card className="border-none shadow-2xl overflow-hidden rounded-[2rem]">
-              <CardHeader className="bg-primary/5 border-b pb-8">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <CardTitle className="flex items-center gap-3 text-2xl"><DollarSign className="h-7 w-7 text-primary" /> Painel Financeiro</CardTitle>
-                    <CardDescription>Faturamento consolidado e métricas administrativas.</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-8 space-y-8">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="p-8 bg-primary/10 rounded-[2rem] border-2 border-primary/20 flex flex-col items-center text-center">
-                    <p className="text-xs uppercase font-black text-primary/60 tracking-widest mb-2">Faturamento Bruto</p>
-                    <p className="text-5xl font-black text-primary">R$ {totalBilling.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                  </div>
-                  <div className="p-8 bg-muted rounded-[2rem] border flex flex-col items-center text-center">
-                    <p className="text-xs uppercase font-black text-muted-foreground tracking-widest mb-2">Total de Atendimentos</p>
-                    <p className="text-5xl font-black">{appointments?.length || 0}</p>
-                  </div>
-                  <div className="p-8 bg-accent/10 rounded-[2rem] border-2 border-accent/20 flex flex-col items-center text-center">
-                    <p className="text-xs uppercase font-black text-accent/60 tracking-widest mb-2">Insumos & Despesas</p>
-                    <div className="flex items-center gap-2">
-                       <p className="text-5xl font-black text-accent">R$ 0,00</p>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="rounded-[1.5rem] border overflow-hidden">
-                  <Table>
-                    <TableHeader className="bg-muted/50">
-                      <TableRow>
-                        <TableHead className="pl-6">Data</TableHead>
-                        <TableHead>Paciente</TableHead>
-                        <TableHead>Serviço</TableHead>
-                        <TableHead className="text-right pr-6">Valor</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {appointments?.map((apt) => {
-                        const service = SERVICES.find(s => s.id === apt.serviceId);
-                        return (
-                          <TableRow key={apt.id}>
-                            <TableCell className="text-xs pl-6">{format(new Date(apt.date), "dd/MM/yyyy")}</TableCell>
-                            <TableCell className="font-bold">{apt.patientName}</TableCell>
-                            <TableCell className="text-xs italic">{apt.serviceName || service?.name}</TableCell>
-                            <TableCell className="text-right font-bold pr-6 text-primary">R$ {service?.price.toFixed(2)}</TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <Card className="bg-primary text-white border-none shadow-xl rounded-[2rem] p-8">
+                <p className="text-xs uppercase font-black opacity-60 mb-2 tracking-widest">Faturamento Estimado</p>
+                <p className="text-5xl font-black">R$ {totalBilling.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+              </Card>
+              <Card className="bg-muted border-none shadow-xl rounded-[2rem] p-8">
+                <p className="text-xs uppercase font-black text-muted-foreground mb-2 tracking-widest">Atendimentos Totais</p>
+                <p className="text-5xl font-black">{appointments?.length || 0}</p>
+              </Card>
+              <Card className="bg-accent text-white border-none shadow-xl rounded-[2rem] p-8">
+                <p className="text-xs uppercase font-black opacity-60 mb-2 tracking-widest">Novos Pacientes</p>
+                <p className="text-5xl font-black">{allUsers?.filter(u => u.role === 'patient').length || 0}</p>
+              </Card>
+            </div>
           </TabsContent>
         )}
 
@@ -419,29 +353,29 @@ export default function AdminDashboard() {
                 <CardHeader className="pb-4">
                   <div className="relative">
                     <Search className="absolute left-4 top-3.5 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Buscar paciente..." className="pl-12 h-12 rounded-2xl bg-muted/30 border-none focus:ring-2 focus:ring-primary/50" value={searchPatient} onChange={(e) => setSearchPatient(e.target.value)} />
+                    <Input placeholder="Filtrar por nome..." className="pl-12 h-12 rounded-2xl bg-muted/30 border-none" value={searchPatient} onChange={(e) => setSearchPatient(e.target.value)} />
                   </div>
                 </CardHeader>
                 <CardContent className="flex-1 overflow-y-auto space-y-3 px-4 pb-4">
                   {allUsers?.filter(u => u.name.toLowerCase().includes(searchPatient.toLowerCase())).map(u => (
                     <div 
                       key={u.id} 
-                      className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center gap-3 ${selectedPatientRecord?.id === u.id ? 'bg-primary/5 border-primary shadow-inner scale-[0.98]' : 'hover:border-primary/30 hover:bg-muted/5'}`}
+                      className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center gap-3 ${selectedPatientRecord?.id === u.id ? 'bg-primary/5 border-primary shadow-sm' : 'hover:border-primary/20 hover:bg-muted/5'}`}
                       onClick={() => setSelectedPatientRecord({ id: u.id, name: u.name })}
                     >
                       <Avatar className="h-10 w-10">
-                        <AvatarFallback className="bg-muted text-xs font-bold">{u.name.substring(0,2)}</AvatarFallback>
+                        <AvatarFallback className="bg-muted text-xs font-bold">{u.name.substring(0,2).toUpperCase()}</AvatarFallback>
                       </Avatar>
                       <div>
                         <p className="font-bold text-sm">{u.name}</p>
-                        <p className="text-[10px] text-muted-foreground uppercase font-black">{u.email}</p>
+                        <p className="text-[10px] text-muted-foreground font-black">{u.email}</p>
                       </div>
                     </div>
                   ))}
                 </CardContent>
               </Card>
 
-              <Card className="md:col-span-2 border-none shadow-2xl rounded-[2rem] overflow-hidden">
+              <Card className="md:col-span-2 border-none shadow-2xl rounded-[2rem] overflow-hidden min-h-[600px]">
                 {selectedPatientRecord ? (
                   <div className="h-full flex flex-col">
                     <CardHeader className="bg-muted/10 border-b flex flex-row items-center justify-between py-8 px-10">
@@ -449,33 +383,33 @@ export default function AdminDashboard() {
                         <div className="h-12 w-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary"><ClipboardList className="h-6 w-6" /></div>
                         <div>
                           <CardTitle className="text-3xl font-headline">{selectedPatientRecord.name}</CardTitle>
-                          <CardDescription className="font-black uppercase tracking-widest text-[10px] text-primary">Ficha Clínica do Paciente</CardDescription>
+                          <CardDescription className="font-black uppercase tracking-widest text-[10px] text-primary">Prontuário Digital</CardDescription>
                         </div>
                       </div>
                       {canUseIA && (
                         <Dialog>
                           <DialogTrigger asChild>
-                            <Button className="rounded-full h-12 px-8 bg-primary hover:scale-105 transition-transform"><Plus className="mr-2 h-5 w-5" /> Nova Evolução</Button>
+                            <Button className="rounded-full h-12 px-8 bg-primary"><Plus className="mr-2 h-5 w-5" /> Nova Evolução</Button>
                           </DialogTrigger>
                           <DialogContent className="sm:max-w-[700px] rounded-[2rem]">
                             <DialogHeader>
-                              <DialogTitle className="text-2xl">Nova Evolução Clínica (IA)</DialogTitle>
+                              <DialogTitle className="text-2xl">Evolução Clínica Assistida por IA</DialogTitle>
                             </DialogHeader>
                             <div className="space-y-6 py-6">
                               <Textarea 
-                                placeholder="Descreva o atendimento..." 
-                                className="min-h-[250px] rounded-2xl p-6 text-lg border-muted bg-muted/10"
+                                placeholder="Notas brutas do atendimento..." 
+                                className="min-h-[250px] rounded-2xl p-6 bg-muted/10"
                                 value={newNote}
                                 onChange={(e) => setNewNote(e.target.value)}
                               />
                               {aiAnalysis && (
-                                <div className="p-6 bg-accent/5 rounded-3xl border-2 border-accent/20 animate-in slide-in-from-bottom-4">
-                                  <p className="text-xs font-black mb-4 uppercase text-accent tracking-widest flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> Resumo Profissional:</p>
+                                <div className="p-6 bg-accent/5 rounded-3xl border-2 border-accent/20">
+                                  <p className="text-xs font-bold mb-4 uppercase text-accent tracking-widest flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> Análise Profissional:</p>
                                   <div className="space-y-4">
-                                    <p className="text-sm leading-relaxed">{aiAnalysis.summary}</p>
-                                    <div className="p-4 bg-white/50 rounded-xl">
-                                      <p className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Sugestão de Tratamento:</p>
-                                      <p className="text-xs italic">{aiAnalysis.suggestedTreatment}</p>
+                                    <p className="text-sm leading-relaxed font-medium">{aiAnalysis.summary}</p>
+                                    <div className="p-4 bg-white/50 rounded-xl border">
+                                      <p className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Próximos Passos:</p>
+                                      <p className="text-xs italic font-bold">{aiAnalysis.suggestedTreatment}</p>
                                     </div>
                                   </div>
                                 </div>
@@ -483,25 +417,25 @@ export default function AdminDashboard() {
                             </div>
                             <DialogFooter className="gap-2">
                               <Button variant="outline" className="rounded-full h-12" onClick={analyzeClinicalNote} disabled={loading === 'ai-analysis'}>
-                                {loading === 'ai-analysis' ? <Loader2 className="animate-spin mr-2" /> : "Gerar com IA"}
+                                {loading === 'ai-analysis' ? <Loader2 className="animate-spin mr-2" /> : "Gerar Resumo IA"}
                               </Button>
-                              <Button className="rounded-full h-12 px-10" onClick={() => {toast({title:"Evolução Salva!"}); setNewNote(""); setAiAnalysis(null)}}>Salvar Ficha</Button>
+                              <Button className="rounded-full h-12 px-10" onClick={() => {toast({title:"Ficha Atualizada!"}); setNewNote(""); setAiAnalysis(null)}}>Salvar Evolução</Button>
                             </DialogFooter>
                           </DialogContent>
                         </Dialog>
                       )}
                     </CardHeader>
                     <CardContent className="p-10 flex flex-col items-center justify-center flex-1">
-                      <div className="text-center space-y-4 max-w-sm">
-                        <div className="mx-auto h-20 w-20 bg-muted/50 rounded-full flex items-center justify-center text-muted-foreground"><Activity className="h-10 w-10" /></div>
-                        <p className="text-muted-foreground text-lg">Histórico sincronizado e pronto para consulta.</p>
+                      <div className="text-center space-y-4 max-w-sm opacity-30">
+                        <Activity className="h-20 w-20 mx-auto text-muted-foreground" />
+                        <p className="text-lg font-bold">Histórico clínico em sincronia com o banco de dados.</p>
                       </div>
                     </CardContent>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center py-40 opacity-10">
+                  <div className="flex flex-col items-center justify-center py-40 opacity-20">
                     <Stethoscope className="h-32 w-32 mb-4" />
-                    <p className="text-2xl font-black uppercase tracking-[0.2em]">Selecione um Paciente</p>
+                    <p className="text-2xl font-black uppercase tracking-widest">Selecione um Paciente</p>
                   </div>
                 )}
               </Card>
@@ -513,8 +447,8 @@ export default function AdminDashboard() {
       <Dialog open={!!reschedulingAppointment} onOpenChange={(open) => !open && setReschedulingAppointment(null)}>
         <DialogContent className="sm:max-w-xl rounded-[3rem] p-10">
           <DialogHeader className="items-center text-center">
-            <DialogTitle className="text-3xl font-headline">Reagendar Consulta</DialogTitle>
-            <DialogDescription className="font-bold text-primary">Paciente: {reschedulingAppointment?.patientName}</DialogDescription>
+            <DialogTitle className="text-3xl font-headline">Reagendar Horário</DialogTitle>
+            <DialogDescription className="font-bold text-primary">Ajustando agenda de {reschedulingAppointment?.patientName}</DialogDescription>
           </DialogHeader>
           <div className="space-y-8 py-6">
             <div className="flex flex-wrap justify-center gap-4">
@@ -524,7 +458,7 @@ export default function AdminDashboard() {
                   <Button
                     key={date.toISOString()}
                     variant={isSelected ? "default" : "outline"}
-                    className={`h-24 w-20 rounded-[2rem] flex flex-col gap-1 transition-all ${isSelected ? 'scale-110 shadow-xl ring-4 ring-primary/20' : 'hover:bg-primary/5'}`}
+                    className={`h-24 w-20 rounded-[2rem] flex flex-col gap-1 transition-all ${isSelected ? 'scale-110 shadow-xl ring-4 ring-primary/20' : ''}`}
                     onClick={() => {
                       setNewDate(date);
                       setNewTime("");
@@ -538,7 +472,7 @@ export default function AdminDashboard() {
               })}
             </div>
             {newDate && (
-              <div className="grid grid-cols-4 gap-3 animate-in fade-in slide-in-from-top-2">
+              <div className="grid grid-cols-4 gap-3">
                 {TIME_SLOTS.map(t => (
                   <Button key={t} variant={newTime === t ? "default" : "outline"} className={`h-12 rounded-xl text-xs font-bold ${newTime === t ? 'shadow-lg scale-105' : ''}`} onClick={() => setNewTime(t)}>
                     {t}
@@ -548,17 +482,17 @@ export default function AdminDashboard() {
             )}
           </div>
           <DialogFooter>
-            <Button className="rounded-full w-full h-14 text-lg font-bold shadow-xl" disabled={!newDate || !newTime} onClick={async () => {
+            <Button className="rounded-full w-full h-14 text-lg font-bold" disabled={!newDate || !newTime} onClick={async () => {
               if (db && reschedulingAppointment && newDate && newTime) {
                 await updateDoc(doc(db, 'appointments', reschedulingAppointment.id), {
                   date: format(newDate, 'yyyy-MM-dd'),
                   time: newTime,
                   status: 'pending'
                 });
-                toast({ title: "Consulta Reagendada", description: "O paciente será notificado." });
+                toast({ title: "Horário Reagendado" });
                 setReschedulingAppointment(null);
               }
-            }}>Confirmar Reagendamento</Button>
+            }}>Confirmar Mudança</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
