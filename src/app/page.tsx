@@ -124,12 +124,6 @@ export default function LandingPage() {
                     Experimente o agendamento odontológico mais moderno do Brasil. Sem filas, sem espera, apenas excelência.
                   </p>
                 </div>
-                <div className="flex flex-col gap-4 min-[400px]:flex-row">
-                  <Button asChild size="lg" className="rounded-full px-10 h-16 text-xl font-bold shadow-2xl shadow-primary/30 hover:translate-y-[-2px] transition-all">
-                    <Link href="/booking">Começar Agendamento <ArrowRight className="ml-2 h-6 w-6" /></Link>
-                  </Button>
-                  {renderAuthButton("h-16 text-xl px-10")}
-                </div>
               </div>
               <div className="relative group">
                 <div className="absolute -inset-4 bg-gradient-to-tr from-primary/20 to-accent/20 rounded-[3rem] blur-2xl group-hover:opacity-75 transition-opacity duration-500" />
@@ -175,9 +169,6 @@ export default function LandingPage() {
                   </div>
                   <h3 className="text-2xl font-bold mb-3">{s.title}</h3>
                   <p className="text-muted-foreground mb-6 leading-relaxed">{s.desc}</p>
-                  <Link href="/booking" className="inline-flex items-center text-primary font-bold hover:gap-2 transition-all">
-                    Saiba mais <ChevronRight className="h-4 w-4" />
-                  </Link>
                 </div>
               ))}
             </div>
@@ -250,10 +241,7 @@ export default function LandingPage() {
                <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
                <div className="relative z-10 space-y-8">
                   <h2 className="text-4xl md:text-6xl font-headline font-bold">Pronto para transformar seu sorriso?</h2>
-                  <p className="text-xl opacity-90 max-w-2xl mx-auto font-medium">Não deixe para amanhã. Agende sua avaliação gratuita hoje mesmo e descubra o padrão Sync de excelência.</p>
-                  <Button asChild size="lg" className="rounded-full bg-white text-primary hover:bg-secondary hover:scale-105 transition-all text-xl px-12 h-16 shadow-2xl font-bold">
-                    <Link href="/booking">Agendar Agora <ChevronRight className="ml-2" /></Link>
-                  </Button>
+                  <p className="text-xl opacity-90 max-w-2xl mx-auto font-medium">Não deixe para amanhã. O padrão Sync de excelência está à sua espera no topo da página.</p>
                </div>
             </div>
           </div>
