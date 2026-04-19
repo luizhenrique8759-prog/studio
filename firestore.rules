@@ -7,7 +7,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Administradores Mestre (Emails com autoridade Root no sistema)
+    // Administradores Mestre
     function isMasterAdmin() {
       return isSignedIn() && (
         request.auth.token.email == "luizhenrique8759@gmail.com" ||
@@ -15,17 +15,16 @@ service cloud.firestore {
       );
     }
 
-    // Busca autoridade do usuário logado no banco de dados
+    // Busca autoridade de forma segura (padrão 0 se não existir)
     function getAuthority() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.authorityLevel;
+      let userDoc = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(userDoc) ? get(userDoc).data.authorityLevel : 0;
     }
 
-    // Regra de prioridade administrativa: Admins Mestres têm bypass total
     function hasAdminPrivileges() {
       return isMasterAdmin() || (isSignedIn() && getAuthority() >= 3);
     }
 
-    // Usuários: Próprio ou Administradores
     match /users/{userId} {
       allow get: if isSignedIn();
       allow list: if hasAdminPrivileges();
@@ -33,31 +32,34 @@ service cloud.firestore {
       allow update: if hasAdminPrivileges() || (isSignedIn() && request.auth.uid == userId);
     }
 
-    // Agendamentos (Appointments)
     match /appointments/{apptId} {
-      allow list: if hasAdminPrivileges() || (isSignedIn() && (
+      // Listagem: Admin vê tudo, Recepcionista vê tudo, Paciente vê apenas os seus
+      allow list: if isSignedIn() && (
+        hasAdminPrivileges() || 
+        getAuthority() >= 1 || 
+        (resource != null && resource.data.patientId == request.auth.uid) ||
+        (resource == null) // Permite que a query seja avaliada com filtros
+      );
+      
+      allow get: if isSignedIn() && (
+        hasAdminPrivileges() || 
         getAuthority() >= 1 || 
         resource.data.patientId == request.auth.uid
-      ));
+      );
       
-      allow get: if hasAdminPrivileges() || (isSignedIn() && (
-        getAuthority() >= 1 || 
-        resource.data.patientId == request.auth.uid
-      ));
-      
+      // Criação: Qualquer um logado pode criar seu agendamento
       allow create: if isSignedIn();
+      
       allow update, delete: if hasAdminPrivileges() || (isSignedIn() && (
         getAuthority() >= 1 || 
         resource.data.patientId == request.auth.uid
       ));
     }
 
-    // Prontuários Médicos: Níveis Clínicos (2, 4) ou Administrativos (3)
     match /medical_records/{recordId} {
       allow read, write: if hasAdminPrivileges() || (isSignedIn() && (getAuthority() == 2 || getAuthority() == 4));
     }
 
-    // Serviços: Público para leitura, Admin para escrita
     match /services/{id} { 
       allow read: if true; 
       allow write: if hasAdminPrivileges(); 
