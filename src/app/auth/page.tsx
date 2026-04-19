@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Stethoscope, Loader2, Shield } from "lucide-react";
-import Link from 'link';
 import { useAuth, useFirestore } from '@/firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
@@ -21,7 +20,7 @@ export default function AuthPage() {
 
   // Configuração mestre para garantir acesso aos e-mails específicos
   const ADMIN_EMAILS: Record<string, { level: number, role: string }> = {
-    "luizhenrique8759@gmail.com": { level: 4, role: 'dentist' },
+    "luizhenrique8759@gmail.com": { level: 3, role: 'admin' },
     "luiz87596531@gmail.com": { level: 3, role: 'admin' }
   };
 
@@ -61,6 +60,7 @@ export default function AuthPage() {
           updatedAt: new Date().toISOString(),
         };
 
+        // Se for um admin mestre, garante que o nível seja pelo menos o definido no bootstrap
         if (bootConfig && (existingData.authorityLevel || 0) < bootConfig.level) {
           updatePayload.authorityLevel = bootConfig.level;
           updatePayload.role = bootConfig.role;
@@ -71,8 +71,10 @@ export default function AuthPage() {
 
       toast({ title: "Login realizado com sucesso" });
       
-      // Redirecionamento imediato após login
-      const finalLevel = bootConfig ? bootConfig.level : (userSnap.exists() ? userSnap.data().authorityLevel : 0);
+      // Redirecionamento imediato após login baseado na autoridade
+      const finalSnap = await getDoc(userRef);
+      const finalLevel = finalSnap.data()?.authorityLevel || 0;
+      
       if (finalLevel >= 1) {
         router.push('/admin');
       } else {

@@ -7,7 +7,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Busca autoridade do documento do usuário de forma segura
+    // Busca autoridade de forma segura evitando recursividade infinita
     function getAuthority() {
       let userDocPath = /databases/$(database)/documents/users/$(request.auth.uid);
       return exists(userDocPath) ? get(userDocPath).data.authorityLevel : 0;
@@ -29,8 +29,9 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
+      // Regra fundamental: master admins podem listar e gerenciar todos
+      allow list: if hasAdminPrivileges();
       allow get: if isSignedIn();
-      allow list: if hasStaffPrivileges();
       allow create: if isSignedIn() && request.auth.uid == userId;
       allow update: if hasAdminPrivileges() || (isSignedIn() && request.auth.uid == userId);
     }
@@ -43,12 +44,12 @@ service cloud.firestore {
       
       allow get: if isSignedIn() && (
         hasStaffPrivileges() || 
-        resource.data.patientId == request.auth.uid
+        (resource != null && resource.data.patientId == request.auth.uid)
       );
       
       allow create: if isSignedIn() && (
         hasStaffPrivileges() || 
-        request.resource.data.patientId == request.auth.uid
+        (request.resource.data.patientId == request.auth.uid)
       );
       
       allow update, delete: if isSignedIn() && (
@@ -58,7 +59,7 @@ service cloud.firestore {
     }
 
     match /medical_records/{recordId} {
-      allow read, write: if isSignedIn() && (hasStaffPrivileges() && getAuthority() >= 2);
+      allow read, write: if isSignedIn() && (hasStaffPrivileges() && (getAuthority() >= 2 || isMasterAdmin()));
     }
 
     match /services/{id} { 
