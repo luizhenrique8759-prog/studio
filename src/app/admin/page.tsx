@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MOCK_APPOINTMENTS, SERVICES, Appointment, TIME_SLOTS } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, CheckCircle2, Calendar as CalendarIcon, Clock, Users, DollarSign, UserPlus, UserMinus, Shield, Stethoscope } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, CheckCircle2, Calendar as CalendarIcon, Clock, Users, DollarSign, UserPlus, UserMinus, Shield, Stethoscope, Star } from "lucide-react";
 import { generateClinicalSummary } from "@/ai/flows/generate-clinical-summary";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { collection, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { format, addDays, isSunday, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -39,7 +40,7 @@ export default function AdminDashboard() {
   const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
   const usersRef = useMemoFirebase(() => {
-    if (!user || !db || user.email !== HARDCODED_ADMIN_EMAIL) return null;
+    if (!user || !db) return null;
     return collection(db, 'users');
   }, [db, user]);
 
@@ -63,7 +64,14 @@ export default function AdminDashboard() {
   }, [user, isUserLoading, router]);
 
   const isAdmin = user?.email === HARDCODED_ADMIN_EMAIL;
+  const authorityLevel = userData?.authorityLevel || 0;
   const isProfessional = userData?.role === 'professional' || isAdmin;
+
+  // Permissões Baseadas em Nível
+  const canViewRecords = isAdmin || authorityLevel >= 2;
+  const canViewManagement = isAdmin || authorityLevel >= 3;
+  const canEditRoles = isAdmin; // Apenas Admin Blindado
+  const canViewFinance = isAdmin; // Apenas Admin Blindado
 
   const handleLogout = async () => {
     if (!auth) return;
@@ -76,14 +84,18 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleToggleProfessional = async (targetUser: any) => {
+  const handleToggleProfessional = async (targetUser: any, level: string) => {
     if (!db || !isAdmin) return;
     const isProf = targetUser.role === 'professional';
-    const newRole = isProf ? 'patient' : 'professional';
+    const newRole = isProf && level === "0" ? 'patient' : 'professional';
+    const newLevel = parseInt(level);
     
     try {
       const userRef = doc(db, 'users', targetUser.id);
-      await updateDoc(userRef, { role: newRole });
+      await updateDoc(userRef, { 
+        role: newRole,
+        authorityLevel: newLevel
+      });
 
       const roleRef = doc(db, 'app_roles', 'professional', 'users', targetUser.id);
       if (newRole === 'professional') {
@@ -93,8 +105,8 @@ export default function AdminDashboard() {
       }
 
       toast({
-        title: "Papel Atualizado",
-        description: `${targetUser.name} agora é ${newRole === 'professional' ? 'um colaborador' : 'um paciente'}.`
+        title: "Autoridade Atualizada",
+        description: `${targetUser.name} agora possui Nível ${newLevel}.`
       });
     } catch (error) {
       toast({ variant: "destructive", title: "Erro ao atualizar", description: "Verifique suas permissões." });
@@ -159,13 +171,13 @@ export default function AdminDashboard() {
     <div className="p-4 md:p-8 space-y-8 bg-background min-h-screen">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-center gap-4">
-          <Avatar className={`h-14 w-14 border-4 ${isAdmin ? 'border-primary' : 'border-accent shadow-lg'}`}>
+          <Avatar className={`h-14 w-14 border-4 ${isAdmin ? 'border-primary shadow-primary/20' : 'border-accent shadow-accent/20'}`}>
             <AvatarImage src={user.photoURL || undefined} />
             <AvatarFallback className={`${isAdmin ? 'bg-primary' : 'bg-accent'} text-white font-bold text-xl`}>{user.displayName?.substring(0,2).toUpperCase()}</AvatarFallback>
           </Avatar>
           <div>
             <h1 className="text-4xl font-headline font-bold text-primary tracking-tight">
-              {isAdmin ? 'Portal Administrador Blindado' : 'Portal do Colaborador'}
+              {isAdmin ? 'Portal Administrador Blindado' : `Portal do Colaborador (Lvl ${authorityLevel})`}
             </h1>
             <p className="text-muted-foreground flex items-center gap-2 font-medium">
               {isAdmin ? <Shield className="h-4 w-4 text-primary fill-primary/20" /> : <Stethoscope className="h-4 w-4" />} {user.email}
@@ -179,10 +191,10 @@ export default function AdminDashboard() {
 
       <Tabs defaultValue="appointments" className="w-full">
         <TabsList className="bg-muted/50 p-1.5 rounded-2xl mb-8 flex-wrap h-auto border">
-          <TabsTrigger value="appointments" className="rounded-xl px-8 data-[state=active]:bg-white data-[state=active]:shadow-md">Agenda</TabsTrigger>
-          <TabsTrigger value="records" className="rounded-xl px-8 data-[state=active]:bg-white data-[state=active]:shadow-md">Prontuários</TabsTrigger>
-          {isAdmin && <TabsTrigger value="management" className="rounded-xl px-8 data-[state=active]:bg-primary data-[state=active]:text-white">Equipe & Usuários</TabsTrigger>}
-          {isAdmin && <TabsTrigger value="billing" className="rounded-xl px-8 data-[state=active]:bg-primary data-[state=active]:text-white">Financeiro</TabsTrigger>}
+          <TabsTrigger value="appointments" className="rounded-xl px-8 data-[state=active]:bg-white data-[state=active]:shadow-sm">Agenda</TabsTrigger>
+          {canViewRecords && <TabsTrigger value="records" className="rounded-xl px-8 data-[state=active]:bg-white data-[state=active]:shadow-sm">Prontuários</TabsTrigger>}
+          {canViewManagement && <TabsTrigger value="management" className="rounded-xl px-8 data-[state=active]:bg-primary data-[state=active]:text-white">Equipe & Usuários</TabsTrigger>}
+          {canViewFinance && <TabsTrigger value="billing" className="rounded-xl px-8 data-[state=active]:bg-primary data-[state=active]:text-white">Financeiro</TabsTrigger>}
         </TabsList>
         
         <TabsContent value="appointments">
@@ -234,127 +246,137 @@ export default function AdminDashboard() {
           </Card>
         </TabsContent>
 
-        {isAdmin && (
-          <>
-            <TabsContent value="management">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <Card className="border-none shadow-2xl rounded-[2rem]">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-3 text-2xl"><Users className="h-6 w-6 text-primary" /> Gestão de Usuários</CardTitle>
-                    <CardDescription>Defina colaboradores e controle acessos.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {isLoadingUsers ? <Loader2 className="animate-spin" /> : allUsers?.map(u => (
-                        <div key={u.id} className="flex items-center justify-between p-4 border rounded-[1.5rem] hover:bg-muted/5 transition-colors">
-                          <div className="flex items-center gap-4">
-                            <Avatar className="h-10 w-10">
-                              <AvatarFallback className="bg-primary/10 text-primary font-bold">{u.name.substring(0,2)}</AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <p className="font-bold">{u.name}</p>
-                              <p className="text-xs text-muted-foreground">{u.email}</p>
-                              <Badge variant={u.role === 'professional' ? 'default' : 'outline'} className="mt-1 text-[8px] h-4">
-                                {u.role === 'professional' ? 'DENTISTA / COLABORADOR' : 'PACIENTE'}
-                              </Badge>
-                            </div>
+        <TabsContent value="management">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <Card className="border-none shadow-2xl rounded-[2rem]">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-3 text-2xl"><Users className="h-6 w-6 text-primary" /> Gestão de Usuários</CardTitle>
+                <CardDescription>Defina autoridade e controle acessos.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {isLoadingUsers ? <Loader2 className="animate-spin" /> : allUsers?.map(u => (
+                    <div key={u.id} className="flex items-center justify-between p-4 border rounded-[1.5rem] hover:bg-muted/5 transition-colors">
+                      <div className="flex items-center gap-4">
+                        <Avatar className="h-10 w-10">
+                          <AvatarFallback className="bg-primary/10 text-primary font-bold">{u.name.substring(0,2)}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-bold">{u.name}</p>
+                          <p className="text-xs text-muted-foreground">{u.email}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant={u.role === 'professional' ? 'default' : 'outline'} className="text-[8px] h-4">
+                              {u.role === 'professional' ? `LVL ${u.authorityLevel}` : 'PACIENTE'}
+                            </Badge>
                           </div>
-                          <Button 
-                            size="sm" 
-                            variant={u.role === 'professional' ? 'destructive' : 'default'} 
-                            className="rounded-full h-10 w-10 p-0"
-                            onClick={() => handleToggleProfessional(u)}
-                          >
-                            {u.role === 'professional' ? <UserMinus className="h-5 w-5" /> : <UserPlus className="h-5 w-5" />}
-                          </Button>
                         </div>
-                      ))}
+                      </div>
+                      {canEditRoles && (
+                        <Select defaultValue={u.authorityLevel?.toString() || "0"} onValueChange={(val) => handleToggleProfessional(u, val)}>
+                          <SelectTrigger className="w-[140px] rounded-full text-xs">
+                            <SelectValue placeholder="Nível" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-xl">
+                            <SelectItem value="0">Paciente</SelectItem>
+                            <SelectItem value="1">Lvl 1 - Agenda</SelectItem>
+                            <SelectItem value="2">Lvl 2 - Prontuário</SelectItem>
+                            <SelectItem value="3">Lvl 3 - Equipe</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
                     </div>
-                  </CardContent>
-                </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
 
-                <Card className="border-none shadow-2xl rounded-[2rem] bg-primary text-white">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-3 text-2xl"><ShieldAlert className="h-6 w-6" /> Equipe Habilitada</CardTitle>
-                    <CardDescription className="text-white/70">Profissionais com acesso aos prontuários.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {allUsers?.filter(u => u.role === 'professional').map(u => (
+            <Card className="border-none shadow-2xl rounded-[2rem] bg-primary text-white">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-3 text-2xl"><ShieldAlert className="h-6 w-6" /> Equipe por Nível</CardTitle>
+                <CardDescription className="text-white/70">Visualização das permissões ativas.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {[1, 2, 3].map(lvl => (
+                    <div key={lvl} className="space-y-2">
+                      <p className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-2">Nível {lvl}</p>
+                      {allUsers?.filter(u => u.role === 'professional' && u.authorityLevel === lvl).map(u => (
                         <div key={u.id} className="flex items-center gap-4 p-4 bg-white/10 rounded-2xl backdrop-blur-sm border border-white/20">
                           <Avatar className="h-10 w-10 border-2 border-white">
                             <AvatarFallback className="bg-white text-primary font-bold">{u.name.substring(0,2)}</AvatarFallback>
                           </Avatar>
                           <div>
                             <p className="font-bold">{u.name}</p>
-                            <p className="text-xs opacity-70">Acesso Pleno Ativo</p>
+                            <p className="text-xs opacity-70">Acesso Nível {lvl} Ativo</p>
                           </div>
                         </div>
                       ))}
-                      {allUsers?.filter(u => u.role === 'professional').length === 0 && (
-                        <p className="text-center py-10 opacity-50">Nenhum colaborador definido ainda.</p>
-                      )}
                     </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
+                  ))}
+                  {allUsers?.filter(u => u.role === 'professional').length === 0 && (
+                    <p className="text-center py-10 opacity-50">Nenhum colaborador definido ainda.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
 
-            <TabsContent value="billing">
-              <Card className="border-none shadow-2xl overflow-hidden rounded-[2rem]">
-                <CardHeader className="bg-primary/5 border-b pb-8">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <CardTitle className="flex items-center gap-3 text-2xl"><DollarSign className="h-7 w-7 text-primary" /> Painel Financeiro</CardTitle>
-                      <CardDescription>Resumo bruto baseado em agendamentos confirmados.</CardDescription>
-                    </div>
+        {canViewFinance && (
+          <TabsContent value="billing">
+            <Card className="border-none shadow-2xl overflow-hidden rounded-[2rem]">
+              <CardHeader className="bg-primary/5 border-b pb-8">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle className="flex items-center gap-3 text-2xl"><DollarSign className="h-7 w-7 text-primary" /> Painel Financeiro</CardTitle>
+                    <CardDescription>Resumo bruto baseado em agendamentos confirmados.</CardDescription>
                   </div>
-                </CardHeader>
-                <CardContent className="pt-8 space-y-8">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="p-8 bg-primary/10 rounded-[2rem] border-2 border-primary/20 flex flex-col items-center text-center">
-                      <p className="text-xs uppercase font-black text-primary/60 tracking-widest mb-2">Faturamento Estimado</p>
-                      <p className="text-5xl font-black text-primary">R$ {totalBilling.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                    </div>
-                    <div className="p-8 bg-muted rounded-[2rem] border flex flex-col items-center text-center">
-                      <p className="text-xs uppercase font-black text-muted-foreground tracking-widest mb-2">Procedimentos Totais</p>
-                      <p className="text-5xl font-black">{appointments.length}</p>
-                    </div>
-                    <div className="p-8 bg-accent/10 rounded-[2rem] border-2 border-accent/20 flex flex-col items-center text-center">
-                      <p className="text-xs uppercase font-black text-accent/60 tracking-widest mb-2">Confirmações</p>
-                      <p className="text-5xl font-black text-accent">{appointments.filter(a => a.status === 'confirmed').length}</p>
-                    </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-8 space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="p-8 bg-primary/10 rounded-[2rem] border-2 border-primary/20 flex flex-col items-center text-center">
+                    <p className="text-xs uppercase font-black text-primary/60 tracking-widest mb-2">Faturamento Estimado</p>
+                    <p className="text-5xl font-black text-primary">R$ {totalBilling.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                   </div>
-                  
-                  <div className="rounded-[1.5rem] border overflow-hidden">
-                    <Table>
-                      <TableHeader className="bg-muted/50">
-                        <TableRow>
-                          <TableHead className="pl-6">Data</TableHead>
-                          <TableHead>Paciente</TableHead>
-                          <TableHead>Serviço</TableHead>
-                          <TableHead className="text-right pr-6">Valor</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {appointments.map((apt) => {
-                          const service = SERVICES.find(s => s.id === apt.serviceId);
-                          return (
-                            <TableRow key={apt.id}>
-                              <TableCell className="text-xs pl-6">{format(new Date(apt.date), "dd/MM/yyyy")}</TableCell>
-                              <TableCell className="font-bold">{apt.patientName}</TableCell>
-                              <TableCell className="text-xs italic">{service?.name}</TableCell>
-                              <TableCell className="text-right font-bold pr-6 text-primary">R$ {service?.price.toFixed(2)}</TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
+                  <div className="p-8 bg-muted rounded-[2rem] border flex flex-col items-center text-center">
+                    <p className="text-xs uppercase font-black text-muted-foreground tracking-widest mb-2">Procedimentos Totais</p>
+                    <p className="text-5xl font-black">{appointments.length}</p>
                   </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </>
+                  <div className="p-8 bg-accent/10 rounded-[2rem] border-2 border-accent/20 flex flex-col items-center text-center">
+                    <p className="text-xs uppercase font-black text-accent/60 tracking-widest mb-2">Confirmações</p>
+                    <p className="text-5xl font-black text-accent">{appointments.filter(a => a.status === 'confirmed').length}</p>
+                  </div>
+                </div>
+                
+                <div className="rounded-[1.5rem] border overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-muted/50">
+                      <TableRow>
+                        <TableHead className="pl-6">Data</TableHead>
+                        <TableHead>Paciente</TableHead>
+                        <TableHead>Serviço</TableHead>
+                        <TableHead className="text-right pr-6">Valor</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {appointments.map((apt) => {
+                        const service = SERVICES.find(s => s.id === apt.serviceId);
+                        return (
+                          <TableRow key={apt.id}>
+                            <TableCell className="text-xs pl-6">{format(new Date(apt.date), "dd/MM/yyyy")}</TableCell>
+                            <TableCell className="font-bold">{apt.patientName}</TableCell>
+                            <TableCell className="text-xs italic">{service?.name}</TableCell>
+                            <TableCell className="text-right font-bold pr-6 text-primary">R$ {service?.price.toFixed(2)}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
         )}
 
         <TabsContent value="records">
@@ -382,12 +404,6 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 ))}
-                {(!allUsers || allUsers.length === 0) && (
-                  <div className="flex flex-col items-center justify-center py-20 opacity-30">
-                    <Users className="h-12 w-12 mb-2" />
-                    <p className="text-xs">Nenhum usuário encontrado.</p>
-                  </div>
-                )}
               </CardContent>
             </Card>
 
@@ -442,7 +458,7 @@ export default function AdminDashboard() {
                   <CardContent className="p-10 flex flex-col items-center justify-center flex-1">
                     <div className="text-center space-y-4 max-w-sm">
                       <div className="mx-auto h-20 w-20 bg-muted/50 rounded-full flex items-center justify-center text-muted-foreground"><Clock className="h-10 w-10" /></div>
-                      <p className="text-muted-foreground text-lg">Selecione uma data ou inicie uma nova evolução para carregar o histórico clínico deste paciente.</p>
+                      <p className="text-muted-foreground text-lg">Histórico clínico carregado para este paciente.</p>
                     </div>
                   </CardContent>
                 </div>

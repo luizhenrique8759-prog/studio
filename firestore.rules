@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -6,7 +7,6 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Administrador "Blindado": Verifica documento ou e-mail específico
     function isAdmin() {
       return isSignedIn() && (
         exists(/databases/$(database)/documents/app_roles/admin/$(request.auth.uid)) ||
@@ -14,31 +14,31 @@ service cloud.firestore {
       );
     }
 
+    function getAuthorityLevel() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.authorityLevel;
+    }
+
     function isProfessional() {
       return isSignedIn() && (
         exists(/databases/$(database)/documents/app_roles/professional/$(request.auth.uid)) ||
-        isAdmin() // Admins também têm permissão de profissional
+        isAdmin()
       );
     }
 
     match /users/{userId} {
       allow get: if isSignedIn();
-      allow list: if isAdmin() || isProfessional();
+      allow list: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 3);
       allow create, update: if isSignedIn() && request.auth.uid == userId;
-      // Permite que o admin atualize o campo 'role' do usuário
       allow update: if isAdmin();
     }
 
     match /medical_records/{recordId} {
-      allow get: if isAdmin() || isProfessional() || (isSignedIn() && resource.data.patientUserId == request.auth.uid);
-      allow list: if isAdmin() || isProfessional();
-      allow create: if isAdmin() || isProfessional();
-      allow update: if isAdmin() || (isProfessional() && resource.data.professionalId == request.auth.uid);
+      allow get, list, create: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 2);
+      allow update: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 2 && resource.data.professionalId == request.auth.uid);
     }
 
     match /app_roles/{role}/{userId} {
       allow get: if isSignedIn();
-      // Permitir que o administrador atribua papéis
       allow write: if isAdmin(); 
     }
     
