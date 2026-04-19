@@ -5,10 +5,10 @@ import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { SERVICES, TIME_SLOTS, Service, Professional } from "@/lib/mock-data";
+import { SERVICES, TIME_SLOTS, Service } from "@/lib/mock-data";
 import { format, addDays, isSunday, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Check, Clock, User, Stethoscope, ArrowRight, ArrowLeft, Calendar as CalendarIcon, CalendarCheck, Loader2, Search, Users } from "lucide-react";
+import { Check, Clock, User, Stethoscope, ArrowRight, ArrowLeft, Calendar as CalendarIcon, CalendarCheck, Loader2, Search } from "lucide-react";
 import Link from 'next/link';
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc } from '@/firebase';
 import { collection, query, where, addDoc, doc, orderBy } from 'firebase/firestore';
@@ -28,20 +28,36 @@ export default function BookingPage() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [confirmedDate, setConfirmedDate] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [availableDates, setAvailableDates] = useState<Date[]>([]);
+
+  // Carregar datas apenas no cliente para evitar erro de hidratação
+  useEffect(() => {
+    const dates = [];
+    let current = startOfDay(new Date());
+    while (dates.length < 12) {
+      if (!isSunday(current)) {
+        dates.push(new Date(current));
+      }
+      current = addDays(current, 1);
+    }
+    setAvailableDates(dates);
+  }, []);
 
   const userDocRef = useMemoFirebase(() => {
     if (!user || !db) return null;
     return doc(db, 'users', user.uid);
   }, [db, user]);
-  const { data: userData } = useDoc(userDocRef);
+  
+  const { data: userData, isLoading: isLoadingUserDoc } = useDoc(userDocRef);
   
   const authorityLevel = useMemo(() => {
-    if (user?.email === "luizhenrique8759@gmail.com") return 4;
-    if (user?.email === "luiz87596531@gmail.com") return 3;
+    if (!user) return 0;
+    if (user.email === "luizhenrique8759@gmail.com") return 4;
+    if (user.email === "luiz87596531@gmail.com") return 3;
     return userData?.authorityLevel || 0;
   }, [userData, user]);
 
-  const isAdmin = authorityLevel >= 3;
+  const isAdmin = useMemo(() => authorityLevel >= 3, [authorityLevel]);
 
   const [targetPatient, setTargetPatient] = useState<{ id: string, name: string } | null>(null);
   const [patientSearch, setPatientSearch] = useState("");
@@ -102,7 +118,7 @@ export default function BookingPage() {
       };
 
       await addDoc(collection(db, 'appointments'), appointmentData);
-      setStep(isAdmin ? 7 : 6); 
+      setStep(isAdmin ? 6 : 5); 
     } catch (error) {
       console.error(error);
       toast({
@@ -115,19 +131,7 @@ export default function BookingPage() {
     }
   };
 
-  const availableDates = useMemo(() => {
-    const dates = [];
-    let current = startOfDay(new Date());
-    while (dates.length < 12) {
-      if (!isSunday(current)) {
-        dates.push(new Date(current));
-      }
-      current = addDays(current, 1);
-    }
-    return dates;
-  }, []);
-
-  if (isUserLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-primary h-8 w-8" /></div>;
+  if (isUserLoading || isLoadingUserDoc) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-primary h-8 w-8" /></div>;
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
@@ -203,7 +207,7 @@ export default function BookingPage() {
           </div>
         )}
 
-        {/* Passo 1 (Paciente) / Passo 2 (Admin): Especialista */}
+        {/* Passo Especialista */}
         {((step === 1 && !isAdmin) || (step === 2 && isAdmin)) && (
           <div className="grid gap-6 animate-in fade-in slide-in-from-right-4 duration-500">
             <h2 className="text-3xl font-headline font-bold">Com qual especialista?</h2>
@@ -244,7 +248,7 @@ export default function BookingPage() {
           </div>
         )}
 
-        {/* Passo 2 (Paciente) / Passo 3 (Admin): Serviço */}
+        {/* Passo Serviço */}
         {((step === 2 && !isAdmin) || (step === 3 && isAdmin)) && (
           <div className="grid gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-3xl font-headline font-bold">O que vamos cuidar hoje?</h2>

@@ -8,13 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SERVICES } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, Search, ShieldAlert, CheckCircle2, Shield, Stethoscope, Activity, UserCog, Users, TrendingUp, DollarSign, CalendarPlus, Bell, AlertTriangle, Trash2 } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, ShieldAlert, CheckCircle2, Users, TrendingUp, DollarSign, CalendarPlus, Bell, AlertTriangle, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Input } from "@/components/ui/input";
 import { collection, doc, updateDoc, query, orderBy } from 'firebase/firestore';
 import Link from 'next/link';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -60,9 +59,9 @@ export default function AdminDashboard() {
   }, [userData, user]);
 
   const isAuthorized = useMemo(() => {
-    if (isUserLoading) return false;
+    if (isUserLoading || isLoadingUserData) return false;
     return authorityLevel >= 1;
-  }, [isUserLoading, authorityLevel]);
+  }, [isUserLoading, isLoadingUserData, authorityLevel]);
 
   const usersRef = useMemoFirebase(() => {
     if (!db || !isAuthorized || authorityLevel < 3) return null;
@@ -126,7 +125,7 @@ export default function AdminDashboard() {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
-          <p className="text-sm font-bold text-primary/60 uppercase tracking-widest">Sincronizando Identidade...</p>
+          <p className="text-sm font-bold text-primary/60 uppercase tracking-widest">Sincronizando...</p>
         </div>
       </div>
     );
@@ -139,7 +138,7 @@ export default function AdminDashboard() {
         <h1 className="text-2xl font-bold">Acesso Restrito</h1>
         <p className="text-muted-foreground">Você não tem permissão para acessar esta área.</p>
         <div className="flex gap-2">
-           <Button variant="outline" asChild><Link href="/dashboard">Meu Painel de Paciente</Link></Button>
+           <Button variant="outline" asChild><Link href="/dashboard">Ir para Painel do Paciente</Link></Button>
            <Button onClick={handleLogout}>Sair</Button>
         </div>
       </div>
@@ -243,9 +242,6 @@ export default function AdminDashboard() {
                 <CardTitle className="flex items-center gap-2"><ClipboardList className="h-5 w-5 text-primary" /> Próximas Consultas</CardTitle>
                 <CardDescription>Gerencie o fluxo de pacientes da clínica.</CardDescription>
               </div>
-              <Button asChild variant="outline" size="sm" className="rounded-full border-primary text-primary font-bold">
-                 <Link href="/booking">Marcar Manualmente</Link>
-              </Button>
             </CardHeader>
             <CardContent className="p-0">
               {isLoadingAppts ? (

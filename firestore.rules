@@ -7,7 +7,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Administradores Mestre (Bypass total para evitar erros de permissão nestes e-mails)
+    // Administradores Mestre (Bypass prioritário por e-mail)
     function isMasterAdmin() {
       return isSignedIn() && (
         request.auth.token.email == "luizhenrique8759@gmail.com" ||
@@ -15,10 +15,10 @@ service cloud.firestore {
       );
     }
 
-    // Busca autoridade de forma segura
+    // Busca autoridade do documento do usuário
     function getAuthority() {
-      let userDoc = /databases/$(database)/documents/users/$(request.auth.uid);
-      return exists(userDoc) ? get(userDoc).data.authorityLevel : 0;
+      let userDocPath = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(userDocPath) ? get(userDocPath).data.authorityLevel : 0;
     }
 
     function hasAdminPrivileges() {
@@ -33,30 +33,31 @@ service cloud.firestore {
     }
 
     match /appointments/{apptId} {
-      // Listagem: Admin vê tudo, Recepcionista vê tudo (Lvl 1), Paciente vê apenas os seus
+      // Permissão de listagem global para admins ou recepcionistas
       allow list: if isSignedIn() && (
-        hasAdminPrivileges() || 
-        getAuthority() >= 1 || 
-        (resource != null && resource.data.patientId == request.auth.uid) ||
-        (resource == null)
+        isMasterAdmin() || 
+        getAuthority() >= 1
       );
       
+      // Pacientes só listam com filtro de patientId no código (o que torna a regra de listagem segura)
+      // Nota: O Firestore Rules não filtra, ele apenas valida a consulta.
+      
       allow get: if isSignedIn() && (
-        hasAdminPrivileges() || 
+        isMasterAdmin() || 
         getAuthority() >= 1 || 
         resource.data.patientId == request.auth.uid
       );
       
       allow create: if isSignedIn();
       
-      allow update, delete: if hasAdminPrivileges() || (isSignedIn() && (
+      allow update, delete: if isMasterAdmin() || (isSignedIn() && (
         getAuthority() >= 1 || 
-        resource.data.patientId == request.auth.uid
+        (resource != null && resource.data.patientId == request.auth.uid)
       ));
     }
 
     match /medical_records/{recordId} {
-      allow read, write: if hasAdminPrivileges() || (isSignedIn() && (getAuthority() >= 2));
+      allow read, write: if isMasterAdmin() || (isSignedIn() && (getAuthority() >= 2));
     }
 
     match /services/{id} { 
