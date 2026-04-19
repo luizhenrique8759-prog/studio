@@ -44,7 +44,7 @@ Compile a comprehensive summary of all the following appointments and services, 
 
 Appointments:
 {{#each appointments}}
-- Date: {{{this.date}}}, Service: {{{this.serviceDescription}}}, Cost: $${{{this.cost}}}
+- Date: {{{this.date}}}, Service: {{{this.serviceDescription}}}, Cost: R$ {{{this.cost}}}
 {{/each}}
 
 Provide the billing summary in the 'billingSummary' field and the total cost in the 'totalCost' field.
