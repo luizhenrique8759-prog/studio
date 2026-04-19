@@ -31,7 +31,6 @@ export default function AdminDashboard() {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
   
-  // Guardamos a referência da coleção para só buscar se o usuário estiver logado e for admin
   const usersRef = useMemoFirebase(() => {
     if (!user || !db || user.email !== HARDCODED_ADMIN_EMAIL) return null;
     return collection(db, 'users');
@@ -52,7 +51,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (!isUserLoading && !user) {
-      router.push('/auth');
+      router.push('/');
     }
   }, [user, isUserLoading, router]);
 

@@ -22,7 +22,7 @@ export default function PatientDashboard() {
 
   useEffect(() => {
     if (!isUserLoading && !user) {
-      router.push('/auth');
+      router.push('/');
     }
   }, [user, isUserLoading, router]);
 
@@ -54,7 +54,6 @@ export default function PatientDashboard() {
 
   if (!user) return null;
 
-  // Filtramos os agendamentos do usuário logado (usando mock por ID fixo para demonstração)
   const userAppointments = MOCK_APPOINTMENTS.filter(a => a.patientId === 'u1'); 
   const userInitials = user.displayName?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
 
