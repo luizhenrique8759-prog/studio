@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SERVICES } from "@/lib/mock-data";
-import { Calendar as CalendarIcon, Clock, User, Stethoscope, ChevronRight, LogOut, Loader2, ShieldCheck, ArrowRight } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, User, Stethoscope, LogOut, Loader2, ShieldCheck } from "lucide-react";
 import Link from 'next/link';
 import { useAuth, useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { signOut } from 'firebase/auth';
@@ -27,7 +27,7 @@ export default function PatientDashboard() {
     return doc(db, 'users', user.uid);
   }, [db, user]);
   
-  const { data: userData } = useDoc(userDocRef);
+  const { data: userData, isLoading: isLoadingUser } = useDoc(userDocRef);
   const authorityLevel = userData?.authorityLevel || 0;
 
   const appointmentsQuery = useMemoFirebase(() => {
@@ -50,140 +50,87 @@ export default function PatientDashboard() {
     if (!auth) return;
     try {
       await signOut(auth);
-      toast({ title: "Sessão encerrada" });
       router.push('/');
     } catch (error) {
       toast({ variant: "destructive", title: "Erro ao sair" });
     }
   };
 
-  if (isUserLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (isUserLoading || isLoadingUser) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!user) return null;
 
-  const userInitials = user.displayName?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
   const roleNames = ["Paciente", "Recepção", "Auxiliar", "Administrativo", "Dentista"];
 
   return (
-    <div className="min-h-screen bg-background">
-      <nav className="border-b bg-white/50 backdrop-blur-sm sticky top-0 z-40">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+    <div className="min-h-screen bg-slate-50">
+      <nav className="border-b bg-white h-16 sticky top-0 z-40">
+        <div className="container mx-auto px-4 h-full flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <div className="bg-primary p-1 rounded-lg">
-              <Stethoscope className="h-5 w-5 text-primary-foreground" />
-            </div>
+            <Stethoscope className="h-5 w-5 text-primary" />
             <span className="font-headline font-bold text-primary">Sync</span>
           </Link>
           <div className="flex items-center gap-4">
             {authorityLevel >= 1 && (
               <Button asChild variant="ghost" className="text-primary font-bold hidden md:flex items-center gap-2">
-                <Link href="/admin"><ShieldCheck className="h-4 w-4" /> Portal {roleNames[authorityLevel]}</Link>
+                <Link href="/admin"><ShieldCheck className="h-4 w-4" /> Portal de Gestão</Link>
               </Button>
             )}
             <Avatar className="h-8 w-8 border">
               <AvatarImage src={user.photoURL || undefined} />
-              <AvatarFallback className="bg-accent text-white font-bold">{userInitials}</AvatarFallback>
+              <AvatarFallback>{user.displayName?.charAt(0)}</AvatarFallback>
             </Avatar>
-            <Button variant="ghost" size="icon" className="rounded-full text-destructive" onClick={handleLogout}>
-              <LogOut className="h-5 w-5" />
-            </Button>
+            <Button variant="ghost" size="icon" onClick={handleLogout} className="text-destructive"><LogOut className="h-5 w-5" /></Button>
           </div>
         </div>
       </nav>
 
       <main className="container mx-auto p-4 md:p-8 space-y-8">
-        {authorityLevel >= 3 && (
-          <Card className="bg-primary text-white border-none shadow-2xl rounded-[2rem] overflow-hidden">
-            <CardContent className="p-8 flex flex-col md:flex-row items-center justify-between gap-6">
-              <div className="space-y-2 text-center md:text-left">
-                <h2 className="text-2xl font-black">Super Poderes Ativos (Nível {authorityLevel})</h2>
-                <p className="opacity-80 font-medium">Você pode realizar agendamentos para qualquer paciente do sistema.</p>
-              </div>
-              <Button asChild size="lg" variant="secondary" className="rounded-full px-8 font-bold gap-2 hover:scale-105 transition-all">
-                <Link href="/booking">Realizar Novo Agendamento <ArrowRight className="h-5 w-5" /></Link>
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="flex justify-between items-center">
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-3xl font-headline font-bold text-primary tracking-tight">Painel Pessoal</h1>
-              {authorityLevel > 0 && <Badge variant="outline" className="rounded-full">{roleNames[authorityLevel]}</Badge>}
-            </div>
-            <p className="text-muted-foreground">{user.displayName || 'Paciente'}</p>
+            <h1 className="text-3xl font-headline font-black text-primary">Minhas Consultas</h1>
+            <p className="text-muted-foreground">{user.displayName}</p>
           </div>
-          <Button asChild className="rounded-full px-8 shadow-lg">
+          <Button asChild className="rounded-full shadow-lg">
             <Link href="/booking">Novo Agendamento</Link>
           </Button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-6">
-            <h2 className="text-xl font-headline font-bold flex items-center gap-2">
-              <CalendarIcon className="text-primary h-5 w-5" /> Minha Agenda (como paciente)
-            </h2>
-            
+          <div className="lg:col-span-2 space-y-4">
             {isLoadingAppointments ? (
-              <div className="flex justify-center p-10"><Loader2 className="animate-spin text-primary" /></div>
+              <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-primary" /></div>
             ) : appointments && appointments.length > 0 ? (
-              <div className="space-y-4">
-                {appointments.map(apt => {
-                  const service = SERVICES.find(s => s.id === apt.serviceId);
-                  return (
-                    <Card key={apt.id} className="overflow-hidden border-none shadow-sm hover:shadow-md transition-shadow">
-                      <div className="flex flex-col md:flex-row">
-                        <div className="p-6 flex-1 space-y-4">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <Badge variant={apt.status === 'confirmed' ? 'secondary' : 'outline'}>
-                                {apt.status === 'confirmed' ? 'Confirmado' : 'Em Análise'}
-                              </Badge>
-                              <h3 className="text-xl font-bold mt-2">{apt.serviceName || service?.name}</h3>
-                            </div>
-                            <p className="text-lg font-bold text-primary">R$ {service?.price || '...'}</p>
-                          </div>
-                          
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-muted-foreground">
-                            <div className="flex items-center gap-2"><User className="w-4 h-4" /> {apt.professionalName}</div>
-                            <div className="flex items-center gap-2"><Clock className="w-4 h-4" /> {apt.date} às {apt.time}</div>
-                          </div>
-                        </div>
+              appointments.map(apt => (
+                <Card key={apt.id} className="border-none shadow-sm rounded-2xl overflow-hidden hover:shadow-md transition-shadow">
+                  <CardContent className="p-6">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <Badge variant={apt.status === 'confirmed' ? 'secondary' : 'outline'}>{apt.status === 'confirmed' ? 'Confirmado' : 'Aguardando'}</Badge>
+                        <h3 className="text-xl font-bold mt-2">{apt.serviceName}</h3>
                       </div>
-                    </Card>
-                  );
-                })}
-              </div>
+                      <p className="text-lg font-black text-primary">R$ {SERVICES.find(s => s.id === apt.serviceId)?.price || '...'}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-2"><User className="w-4 h-4" /> {apt.professionalName}</div>
+                      <div className="flex items-center gap-2"><Clock className="w-4 h-4" /> {apt.date} às {apt.time}</div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
             ) : (
-              <Card className="p-12 text-center space-y-4 border-dashed border-2">
-                <div className="mx-auto w-12 h-12 bg-muted rounded-full flex items-center justify-center">
-                  <CalendarIcon className="w-6 h-6 text-muted-foreground" />
-                </div>
-                <p className="font-bold">Nenhum agendamento ativo em seu nome.</p>
-                <Button asChild variant="outline" className="rounded-full">
-                  <Link href="/booking">Marcar Agora</Link>
-                </Button>
+              <Card className="p-20 text-center border-dashed border-2 rounded-[2rem]">
+                <p className="text-muted-foreground font-medium">Você ainda não possui agendamentos ativos.</p>
+                <Button asChild variant="link" className="mt-2 font-bold"><Link href="/booking">Marcar minha primeira consulta</Link></Button>
               </Card>
             )}
           </div>
 
           <div className="space-y-6">
-            <h2 className="text-xl font-headline font-bold">Documentação</h2>
-            <div className="grid gap-3">
-              <Card className="border-none shadow-sm p-4 bg-muted/20">
-                <p className="text-xs font-bold text-muted-foreground uppercase mb-2">Histórico Clínico</p>
-                <p className="text-sm">Para visualizar seu prontuário detalhado, solicite acesso ao seu dentista durante a consulta.</p>
-              </Card>
-              {authorityLevel >= 1 && (
-                 <Card className="border-2 border-primary/20 shadow-sm p-4 bg-primary/5">
-                    <p className="text-xs font-bold text-primary uppercase mb-2">Acesso Rápido</p>
-                    <p className="text-sm mb-4">Você está logado como {roleNames[authorityLevel]}.</p>
-                    <Button asChild variant="default" className="w-full rounded-xl">
-                      <Link href="/admin">Ir para Portal de Gestão</Link>
-                    </Button>
-                 </Card>
-              )}
-            </div>
+             <Card className="rounded-3xl border-none shadow-md p-6 bg-white">
+                <h3 className="font-bold mb-4">Suporte Sync</h3>
+                <p className="text-sm text-muted-foreground mb-4">Em caso de dúvidas sobre seu tratamento ou necessidade de reagendamento urgente, entre em contato.</p>
+                <Button className="w-full rounded-xl" variant="outline">Falar com Recepção</Button>
+             </Card>
           </div>
         </div>
       </main>

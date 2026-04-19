@@ -7,22 +7,18 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Administradores Mestre (Bypass prioritário por e-mail)
-    function isMasterAdmin() {
-      return isSignedIn() && (
-        request.auth.token.email == "luizhenrique8759@gmail.com" ||
-        request.auth.token.email == "luiz87596531@gmail.com"
-      );
-    }
-
-    // Busca autoridade do documento do usuário
+    // Busca autoridade do documento do usuário de forma segura
     function getAuthority() {
       let userDocPath = /databases/$(database)/documents/users/$(request.auth.uid);
       return exists(userDocPath) ? get(userDocPath).data.authorityLevel : 0;
     }
 
     function hasAdminPrivileges() {
-      return isMasterAdmin() || (isSignedIn() && getAuthority() >= 3);
+      return isSignedIn() && getAuthority() >= 3;
+    }
+
+    function hasStaffPrivileges() {
+      return isSignedIn() && getAuthority() >= 1;
     }
 
     match /users/{userId} {
@@ -33,31 +29,27 @@ service cloud.firestore {
     }
 
     match /appointments/{apptId} {
-      // Permissão de listagem global para admins ou recepcionistas
       allow list: if isSignedIn() && (
-        isMasterAdmin() || 
-        getAuthority() >= 1
+        hasStaffPrivileges() || 
+        (resource != null && resource.data.patientId == request.auth.uid) ||
+        (request.query.limit <= 100 && request.query.filters.size() > 0) // Permite consultas filtradas no dashboard
       );
       
-      // Pacientes só listam com filtro de patientId no código (o que torna a regra de listagem segura)
-      // Nota: O Firestore Rules não filtra, ele apenas valida a consulta.
-      
       allow get: if isSignedIn() && (
-        isMasterAdmin() || 
-        getAuthority() >= 1 || 
+        hasStaffPrivileges() || 
         resource.data.patientId == request.auth.uid
       );
       
       allow create: if isSignedIn();
       
-      allow update, delete: if isMasterAdmin() || (isSignedIn() && (
-        getAuthority() >= 1 || 
+      allow update, delete: if isSignedIn() && (
+        hasStaffPrivileges() || 
         (resource != null && resource.data.patientId == request.auth.uid)
-      ));
+      );
     }
 
     match /medical_records/{recordId} {
-      allow read, write: if isMasterAdmin() || (isSignedIn() && (getAuthority() >= 2));
+      allow read, write: if isSignedIn() && getAuthority() >= 2;
     }
 
     match /services/{id} { 

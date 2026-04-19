@@ -19,7 +19,8 @@ export default function AuthPage() {
   const { toast } = useToast();
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  const ADMIN_CONFIG: Record<string, { level: number, role: string }> = {
+  // Configuração inicial para garantir que os e-mails mestres tenham acesso após o login
+  const ADMIN_EMAILS: Record<string, { level: number, role: string }> = {
     "luizhenrique8759@gmail.com": { level: 4, role: 'dentist' },
     "luiz87596531@gmail.com": { level: 3, role: 'admin' }
   };
@@ -37,92 +38,71 @@ export default function AuthPage() {
       const userRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userRef);
       
-      const adminSettings = ADMIN_CONFIG[userEmail];
-      let authorityLevel = 0;
+      const bootConfig = ADMIN_EMAILS[userEmail];
       
       if (!userSnap.exists()) {
-        authorityLevel = adminSettings ? adminSettings.level : 0;
+        const authorityLevel = bootConfig ? bootConfig.level : 0;
         const newUserData = {
           id: user.uid,
           name: user.displayName || 'Usuário',
           email: userEmail,
-          role: adminSettings ? adminSettings.role : 'patient',
+          role: bootConfig ? bootConfig.role : 'patient',
           authorityLevel: authorityLevel,
           photoURL: user.photoURL,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
         await setDoc(userRef, newUserData);
-        toast({ title: "Bem-vindo!", description: "Sua conta foi criada com sucesso." });
       } else {
         const existingData = userSnap.data();
-        authorityLevel = adminSettings ? adminSettings.level : (existingData.authorityLevel || 0);
-        
         const updatePayload: any = {
           name: user.displayName || existingData.name,
           photoURL: user.photoURL || existingData.photoURL,
           updatedAt: new Date().toISOString(),
         };
 
-        if (adminSettings && existingData.authorityLevel !== adminSettings.level) {
-          updatePayload.authorityLevel = adminSettings.level;
-          updatePayload.role = adminSettings.role;
+        // Se o e-mail estiver na lista master mas o nível no banco for menor, atualiza para garantir acesso
+        if (bootConfig && existingData.authorityLevel < bootConfig.level) {
+          updatePayload.authorityLevel = bootConfig.level;
+          updatePayload.role = bootConfig.role;
         }
 
         await updateDoc(userRef, updatePayload);
-        toast({ title: "Login realizado", description: `Bem-vindo de volta, ${user.displayName}!` });
       }
 
-      // Redirecionamento direto baseado no nível
-      if (authorityLevel >= 1) {
-        router.push('/admin');
-      } else {
-        router.push('/dashboard');
-      }
-
+      toast({ title: "Login realizado com sucesso" });
+      router.refresh();
+      
     } catch (error: any) {
       console.error(error);
-      toast({
-        variant: "destructive",
-        title: "Falha na Autenticação",
-        description: "Ocorreu um erro ao tentar entrar.",
-      });
+      toast({ variant: "destructive", title: "Erro na autenticação" });
       setIsLoggingIn(false);
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-      <div className="w-full max-w-md space-y-10">
-        <div className="text-center space-y-4">
-          <Link href="/" className="inline-flex items-center gap-3 group">
-            <div className="bg-primary p-3 rounded-2xl group-hover:scale-110 transition-transform shadow-2xl shadow-primary/30">
-              <Stethoscope className="h-10 w-10 text-primary-foreground" />
-            </div>
-            <div className="flex flex-col text-left">
-              <span className="text-4xl font-headline font-black tracking-tighter text-primary leading-none">Sync</span>
-              <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">Dental Group</span>
-            </div>
+      <div className="w-full max-w-md space-y-8">
+        <div className="text-center space-y-2">
+          <Link href="/" className="inline-flex items-center gap-2">
+            <Stethoscope className="h-8 w-8 text-primary" />
+            <span className="text-3xl font-headline font-black text-primary">Sync</span>
           </Link>
-          <div className="space-y-2">
-            <h2 className="text-3xl font-headline font-black tracking-tight text-foreground">Acesso Sincronizado</h2>
-            <p className="text-muted-foreground font-medium">Sua identidade digital na Sync Dental.</p>
-          </div>
+          <h2 className="text-2xl font-bold">Bem-vindo à Sync Dental</h2>
+          <p className="text-muted-foreground">Sincronize sua saúde bucal conosco.</p>
         </div>
 
-        <Card className="shadow-2xl border-none rounded-[3rem] overflow-hidden">
-          <div className="bg-primary h-2 w-full" />
-          <CardHeader className="space-y-2 pt-10 text-center">
-            <CardTitle className="text-2xl font-black">Entrar</CardTitle>
-            <CardDescription>Login seguro via Google</CardDescription>
+        <Card className="shadow-2xl border-none rounded-3xl overflow-hidden">
+          <CardHeader className="text-center">
+            <CardTitle>Entrar</CardTitle>
+            <CardDescription>Acesse sua conta com o Google</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-6 p-10">
-            <Button onClick={handleGoogleSignIn} disabled={isLoggingIn} variant="outline" className="w-full h-16 gap-4 rounded-2xl border-2 font-black text-xl shadow-lg">
-              {isLoggingIn ? <Loader2 className="animate-spin h-6 w-6" /> : "Login com Google"}
+          <CardContent className="p-8">
+            <Button onClick={handleGoogleSignIn} disabled={isLoggingIn} className="w-full h-14 rounded-2xl text-lg font-bold gap-4">
+              {isLoggingIn ? <Loader2 className="animate-spin h-5 w-5" /> : "Login com Google"}
             </Button>
-            <div className="flex items-center gap-2 justify-center py-2 bg-slate-50 rounded-xl border border-dashed">
-              <Shield className="h-4 w-4 text-primary" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Segurança Biométrica Digital</span>
+            <div className="mt-6 flex items-center gap-2 justify-center text-[10px] text-muted-foreground uppercase font-black tracking-widest">
+              <Shield className="h-3 w-3" /> Proteção de Dados Sync
             </div>
           </CardContent>
         </Card>
