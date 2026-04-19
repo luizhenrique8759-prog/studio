@@ -21,7 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 
 // E-mail do Administrador "Blindado"
-const HARDCODED_ADMIN_EMAIL = "SEU_EMAIL_AQUI@gmail.com";
+const HARDCODED_ADMIN_EMAIL = "luizhenrique8759@gmail.com";
 
 export default function AdminDashboard() {
   const { toast } = useToast();
@@ -102,14 +102,13 @@ export default function AdminDashboard() {
   if (isUserLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!user) return null;
 
-  // Se não for admin blindado, mostra aviso (embora as regras de segurança já bloqueiem o acesso aos dados)
   if (!isAdmin) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center space-y-4">
         <ShieldAlert className="h-16 w-16 text-destructive animate-bounce" />
         <h1 className="text-2xl font-bold">Acesso Restrito</h1>
         <p className="text-muted-foreground max-w-md">
-          Esta área é exclusiva para administradores. Se você é um administrador, certifique-se de estar usando o e-mail configurado.
+          Esta área é exclusiva para administradores. Se você é um administrador, certifique-se de estar usando o e-mail luizhenrique8759@gmail.com.
         </p>
         <Button onClick={handleLogout}>Sair e tentar outro e-mail</Button>
       </div>
