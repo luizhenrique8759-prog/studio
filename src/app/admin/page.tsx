@@ -6,9 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SERVICES, TIME_SLOTS } from "@/lib/mock-data";
+import { SERVICES } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, CheckCircle2, Calendar as CalendarIcon, Clock, Users, DollarSign, Shield, Stethoscope, Activity, UserCog, User } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, Search, ShieldAlert, CheckCircle2, Shield, Stethoscope, Activity, UserCog } from "lucide-react";
 import { generateClinicalSummary } from "@/ai/flows/generate-clinical-summary";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
@@ -16,12 +16,7 @@ import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { collection, doc, setDoc, deleteDoc, updateDoc, query, orderBy } from 'firebase/firestore';
-import { format, addDays, isSunday, startOfDay } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { collection, doc, updateDoc, query, orderBy } from 'firebase/firestore';
 import Link from 'next/link';
 
 const HARDCODED_ADMIN_EMAIL = "luizhenrique8759@gmail.com";
@@ -33,6 +28,7 @@ export default function AdminDashboard() {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
 
+  // O Admin Mestre é determinado imediatamente pelo e-mail do auth
   const isMasterAdmin = user?.email === HARDCODED_ADMIN_EMAIL;
 
   const userDocRef = useMemoFirebase(() => {
@@ -43,17 +39,19 @@ export default function AdminDashboard() {
   const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
   const authorityLevel = useMemo(() => {
-    if (isMasterAdmin) return 3;
+    if (isMasterAdmin) return 4; // Master sempre tem nível máximo
     return userData?.authorityLevel || 0;
   }, [isMasterAdmin, userData]);
 
+  // Autorizado se for Master Admin ou se o documento de usuário já carregou e tem nível >= 1
   const isAuthorized = useMemo(() => {
-    if (isUserLoading || isLoadingUserData) return false;
+    if (isUserLoading) return false;
     if (isMasterAdmin) return true;
+    if (isLoadingUserData) return false;
     return authorityLevel >= 1;
   }, [isMasterAdmin, isLoadingUserData, authorityLevel, isUserLoading]);
 
-  // Consultas baseadas na autoridade carregada
+  // Consultas protegidas pelo estado de autorização
   const usersRef = useMemoFirebase(() => {
     if (!db || !isAuthorized || (authorityLevel < 3 && !isMasterAdmin)) return null;
     return query(collection(db, 'users'), orderBy('name', 'asc'));
@@ -71,8 +69,6 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState<string | null>(null);
   const [searchPatient, setSearchPatient] = useState("");
   const [selectedPatientRecord, setSelectedPatientRecord] = useState<{id: string, name: string} | null>(null);
-  const [newNote, setNewNote] = useState("");
-  const [aiAnalysis, setAiAnalysis] = useState<any>(null);
 
   useEffect(() => {
     if (!isUserLoading && !user) {
@@ -80,8 +76,7 @@ export default function AdminDashboard() {
     }
   }, [user, isUserLoading, router]);
 
-  const canViewRecords = isMasterAdmin || authorityLevel === 2 || authorityLevel === 3 || authorityLevel === 4;
-  const canUseIA = isMasterAdmin || authorityLevel === 4; 
+  const canViewRecords = isMasterAdmin || authorityLevel >= 2;
   const canViewManagement = isMasterAdmin || authorityLevel === 3;
   const canViewFinance = isMasterAdmin || authorityLevel === 3;
 
@@ -132,23 +127,7 @@ export default function AdminDashboard() {
     }, 0);
   }, [appointments]);
 
-  const analyzeClinicalNote = async () => {
-    if (!newNote || !selectedPatientRecord) return;
-    setLoading('ai-analysis');
-    try {
-      const result = await generateClinicalSummary({
-        patientName: selectedPatientRecord.name,
-        dentistNotes: newNote
-      });
-      setAiAnalysis(result);
-    } catch (error) {
-      toast({ variant: "destructive", title: "Erro na IA" });
-    } finally {
-      setLoading(null);
-    }
-  };
-
-  if (isUserLoading || isLoadingUserData) return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (isUserLoading || (isLoadingUserData && !isMasterAdmin)) return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!user) return null;
 
   if (!isAuthorized) {
@@ -262,7 +241,7 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {isLoadingUsers ? <Loader2 className="animate-spin text-primary" /> : allUsers?.map(u => (
+                  {isLoadingUsers ? <div className="col-span-full flex justify-center py-12"><Loader2 className="animate-spin text-primary" /></div> : allUsers?.map(u => (
                     <div key={u.id} className="p-6 border rounded-[2rem] hover:shadow-lg transition-all space-y-4">
                       <div className="flex items-center gap-4">
                         <Avatar className="h-12 w-12">
@@ -275,22 +254,18 @@ export default function AdminDashboard() {
                       </div>
                       <div className="space-y-2 pt-2 border-t">
                         <p className="text-[10px] font-black uppercase text-muted-foreground">Privilégio</p>
-                        <Select 
+                        <select 
+                          className="w-full bg-background border rounded-xl p-2 text-sm"
                           defaultValue={u.authorityLevel?.toString() || "0"} 
-                          onValueChange={(val) => handleToggleProfessional(u, val)}
+                          onChange={(e) => handleToggleProfessional(u, e.target.value)}
                           disabled={!isMasterAdmin || u.email === HARDCODED_ADMIN_EMAIL}
                         >
-                          <SelectTrigger className="rounded-xl">
-                            <SelectValue placeholder="Nível" />
-                          </SelectTrigger>
-                          <SelectContent className="rounded-xl">
-                            <SelectItem value="0">Paciente</SelectItem>
-                            <SelectItem value="1">Nível 1 - Recepção (Agenda)</SelectItem>
-                            <SelectItem value="2">Nível 2 - Auxiliar (Agenda + Prontuário)</SelectItem>
-                            <SelectItem value="3">Nível 3 - Administrativo (Total)</SelectItem>
-                            <SelectItem value="4">Nível 4 - Dentista (Agenda + Prontuário + IA)</SelectItem>
-                          </SelectContent>
-                        </Select>
+                          <option value="0">Paciente</option>
+                          <option value="1">Nível 1 - Recepção (Agenda)</option>
+                          <option value="2">Nível 2 - Auxiliar (Agenda + Prontuário)</option>
+                          <option value="3">Nível 3 - Administrativo (Total)</option>
+                          <option value="4">Nível 4 - Dentista (Agenda + Prontuário + IA)</option>
+                        </select>
                       </div>
                     </div>
                   ))}
@@ -362,7 +337,7 @@ export default function AdminDashboard() {
                     </CardHeader>
                     <CardContent className="p-10 flex flex-col items-center justify-center flex-1">
                       <div className="text-center space-y-4 max-w-sm opacity-30">
-                        <Activity className="h-20 w-20 mx-auto text-muted-foreground" />
+                        <Stethoscope className="h-20 w-20 mx-auto text-muted-foreground" />
                         <p className="text-lg font-bold">Histórico clínico em sincronia.</p>
                       </div>
                     </CardContent>
