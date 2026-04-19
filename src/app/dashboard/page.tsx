@@ -1,19 +1,19 @@
 
 "use client";
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SERVICES } from "@/lib/mock-data";
-import { Calendar as CalendarIcon, Clock, User, Stethoscope, ChevronRight, LogOut, Loader2 } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, User, Stethoscope, ChevronRight, LogOut, Loader2, ShieldCheck, ArrowRight } from "lucide-react";
 import Link from 'next/link';
-import { useAuth, useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useAuth, useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { collection, query, where, orderBy } from 'firebase/firestore';
+import { collection, query, where, doc } from 'firebase/firestore';
 
 export default function PatientDashboard() {
   const { user, isUserLoading } = useUser();
@@ -22,7 +22,14 @@ export default function PatientDashboard() {
   const router = useRouter();
   const { toast } = useToast();
 
-  // Simplificamos a query para garantir permissões e performance sem depender de múltiplos índices complexos
+  const userDocRef = useMemoFirebase(() => {
+    if (!user || !db) return null;
+    return doc(db, 'users', user.uid);
+  }, [db, user]);
+  
+  const { data: userData } = useDoc(userDocRef);
+  const authorityLevel = userData?.authorityLevel || 0;
+
   const appointmentsQuery = useMemoFirebase(() => {
     if (!db || !user) return null;
     return query(
@@ -31,7 +38,7 @@ export default function PatientDashboard() {
     );
   }, [db, user]);
 
-  const { data: appointments, isLoading: isLoadingAppointments, error } = useCollection(appointmentsQuery);
+  const { data: appointments, isLoading: isLoadingAppointments } = useCollection(appointmentsQuery);
 
   useEffect(() => {
     if (!isUserLoading && !user) {
@@ -54,6 +61,7 @@ export default function PatientDashboard() {
   if (!user) return null;
 
   const userInitials = user.displayName?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'U';
+  const roleNames = ["Paciente", "Recepção", "Auxiliar", "Administrativo", "Dentista"];
 
   return (
     <div className="min-h-screen bg-background">
@@ -66,6 +74,11 @@ export default function PatientDashboard() {
             <span className="font-headline font-bold text-primary">Sync</span>
           </Link>
           <div className="flex items-center gap-4">
+            {authorityLevel >= 1 && (
+              <Button asChild variant="ghost" className="text-primary font-bold hidden md:flex items-center gap-2">
+                <Link href="/admin"><ShieldCheck className="h-4 w-4" /> Portal {roleNames[authorityLevel]}</Link>
+              </Button>
+            )}
             <Avatar className="h-8 w-8 border">
               <AvatarImage src={user.photoURL || undefined} />
               <AvatarFallback className="bg-accent text-white font-bold">{userInitials}</AvatarFallback>
@@ -78,9 +91,26 @@ export default function PatientDashboard() {
       </nav>
 
       <main className="container mx-auto p-4 md:p-8 space-y-8">
+        {authorityLevel >= 3 && (
+          <Card className="bg-primary text-white border-none shadow-2xl rounded-[2rem] overflow-hidden">
+            <CardContent className="p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="space-y-2 text-center md:text-left">
+                <h2 className="text-2xl font-black">Super Poderes Ativos (Nível {authorityLevel})</h2>
+                <p className="opacity-80 font-medium">Você pode realizar agendamentos para qualquer paciente do sistema.</p>
+              </div>
+              <Button asChild size="lg" variant="secondary" className="rounded-full px-8 font-bold gap-2 hover:scale-105 transition-all">
+                <Link href="/booking">Realizar Novo Agendamento <ArrowRight className="h-5 w-5" /></Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-headline font-bold text-primary tracking-tight">Painel Pessoal</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-3xl font-headline font-bold text-primary tracking-tight">Painel Pessoal</h1>
+              {authorityLevel > 0 && <Badge variant="outline" className="rounded-full">{roleNames[authorityLevel]}</Badge>}
+            </div>
             <p className="text-muted-foreground">{user.displayName || 'Paciente'}</p>
           </div>
           <Button asChild className="rounded-full px-8 shadow-lg">
@@ -91,7 +121,7 @@ export default function PatientDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
             <h2 className="text-xl font-headline font-bold flex items-center gap-2">
-              <CalendarIcon className="text-primary h-5 w-5" /> Minha Agenda
+              <CalendarIcon className="text-primary h-5 w-5" /> Minha Agenda (como paciente)
             </h2>
             
             {isLoadingAppointments ? (
@@ -129,7 +159,7 @@ export default function PatientDashboard() {
                 <div className="mx-auto w-12 h-12 bg-muted rounded-full flex items-center justify-center">
                   <CalendarIcon className="w-6 h-6 text-muted-foreground" />
                 </div>
-                <p className="font-bold">Nenhum agendamento ativo.</p>
+                <p className="font-bold">Nenhum agendamento ativo em seu nome.</p>
                 <Button asChild variant="outline" className="rounded-full">
                   <Link href="/booking">Marcar Agora</Link>
                 </Button>
@@ -144,6 +174,15 @@ export default function PatientDashboard() {
                 <p className="text-xs font-bold text-muted-foreground uppercase mb-2">Histórico Clínico</p>
                 <p className="text-sm">Para visualizar seu prontuário detalhado, solicite acesso ao seu dentista durante a consulta.</p>
               </Card>
+              {authorityLevel >= 1 && (
+                 <Card className="border-2 border-primary/20 shadow-sm p-4 bg-primary/5">
+                    <p className="text-xs font-bold text-primary uppercase mb-2">Acesso Rápido</p>
+                    <p className="text-sm mb-4">Você está logado como {roleNames[authorityLevel]}.</p>
+                    <Button asChild variant="default" className="w-full rounded-xl">
+                      <Link href="/admin">Ir para Portal de Gestão</Link>
+                    </Button>
+                 </Card>
+              )}
             </div>
           </div>
         </div>

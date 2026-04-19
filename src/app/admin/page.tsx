@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SERVICES } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, Search, ShieldAlert, CheckCircle2, Shield, Stethoscope, Activity, UserCog, Users, TrendingUp, DollarSign } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, Search, ShieldAlert, CheckCircle2, Shield, Stethoscope, Activity, UserCog, Users, TrendingUp, DollarSign, CalendarPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
 import { signOut } from 'firebase/auth';
@@ -105,7 +105,10 @@ export default function AdminDashboard() {
   if (isUserLoading || isLoadingUserData) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="text-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+          <p className="text-sm font-bold text-primary/60 uppercase tracking-widest">Sincronizando Identidade...</p>
+        </div>
       </div>
     );
   }
@@ -148,9 +151,16 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
-        <Button variant="outline" className="rounded-full text-destructive border-destructive font-bold" onClick={handleLogout}>
-          <LogOut className="mr-2 h-4 w-4" /> Sair do Sistema
-        </Button>
+        <div className="flex gap-2">
+          {authorityLevel >= 3 && (
+            <Button asChild className="rounded-full bg-accent hover:bg-accent/90 text-white font-bold px-8 shadow-lg">
+              <Link href="/booking"><CalendarPlus className="mr-2 h-5 w-5" /> Novo Agendamento</Link>
+            </Button>
+          )}
+          <Button variant="outline" className="rounded-full text-destructive border-destructive font-bold" onClick={handleLogout}>
+            <LogOut className="mr-2 h-4 w-4" /> Sair
+          </Button>
+        </div>
       </header>
 
       <Tabs defaultValue="appointments" className="w-full">
@@ -163,8 +173,14 @@ export default function AdminDashboard() {
 
         <TabsContent value="appointments">
           <Card className="border-none shadow-2xl rounded-[2rem] overflow-hidden">
-            <CardHeader className="bg-muted/10 border-b">
-              <CardTitle className="flex items-center gap-2"><ClipboardList className="h-5 w-5 text-primary" /> Próximas Consultas</CardTitle>
+            <CardHeader className="bg-muted/10 border-b flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2"><ClipboardList className="h-5 w-5 text-primary" /> Próximas Consultas</CardTitle>
+                <CardDescription>Gerencie o fluxo de pacientes da clínica.</CardDescription>
+              </div>
+              <Button asChild variant="outline" size="sm" className="rounded-full border-primary text-primary font-bold">
+                 <Link href="/booking">Marcar Manualmente</Link>
+              </Button>
             </CardHeader>
             <CardContent className="p-0">
               {isLoadingAppts ? (
@@ -212,7 +228,7 @@ export default function AdminDashboard() {
           <Card className="border-none shadow-2xl rounded-[2rem] overflow-hidden">
              <CardHeader className="bg-muted/10 border-b">
               <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5 text-primary" /> Gestão de Colaboradores</CardTitle>
-              <CardDescription>Apenas Administradores (Nível 3+) podem gerenciar permissões.</CardDescription>
+              <CardDescription>Defina as permissões de acesso da sua equipe.</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               {isLoadingUsers ? (
@@ -233,7 +249,7 @@ export default function AdminDashboard() {
                         <TableCell className="font-bold pl-8">{u.name}</TableCell>
                         <TableCell className="text-muted-foreground">{u.email}</TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="rounded-full">Nível {u.authorityLevel || 0}</Badge>
+                          <Badge variant="outline" className="rounded-full">Nível {u.authorityLevel || 0} - {roleNames[u.authorityLevel || 0]}</Badge>
                         </TableCell>
                         <TableCell className="text-right pr-8">
                           <select 
