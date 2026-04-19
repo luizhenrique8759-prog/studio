@@ -5,42 +5,36 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "User",
       "type": "object",
-      "description": "Represents a user account within the system, which can be a patient, an administrator, or linked to a professional.",
+      "description": "Represents a user account with hierarchical authority levels (1: Reception, 2: Clinical, 3: Administrative).",
       "properties": {
         "id": {
-          "type": "string",
-          "description": "Unique identifier for the User entity."
+          "type": "string"
         },
         "name": {
-          "type": "string",
-          "description": "The full name of the user."
+          "type": "string"
         },
         "email": {
           "type": "string",
-          "description": "The email address of the user, used for communication and login.",
           "format": "email"
         },
         "phoneNumber": {
-          "type": "string",
-          "description": "The phone number of the user, primarily for notifications and contact."
+          "type": "string"
         },
         "role": {
           "type": "string",
-          "description": "The role of the user within the system (e.g., 'patient', 'professional', 'admin')."
+          "description": "User role: 'patient' or 'professional'."
         },
         "authorityLevel": {
           "type": "number",
-          "description": "The level of authority for professionals (1: Basic, 2: Intermediate, 3: Advanced).",
+          "description": "1: Reception (Agenda), 2: Clinical (Records), 3: Admin (Finance/Team).",
           "enum": [1, 2, 3]
         },
         "createdAt": {
           "type": "string",
-          "description": "Timestamp when the user account was created.",
           "format": "date-time"
         },
         "updatedAt": {
           "type": "string",
-          "description": "Timestamp when the user account was last updated.",
           "format": "date-time"
         }
       },
@@ -57,130 +51,21 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "MedicalRecord",
       "type": "object",
-      "description": "Stores clinical evolution, anamnesis, and treatment notes for a patient.",
+      "description": "Clinical evolution and patient files.",
       "properties": {
-        "id": {
-          "type": "string"
-        },
-        "patientUserId": {
-          "type": "string"
-        },
-        "professionalId": {
-          "type": "string"
-        },
-        "notes": {
-          "type": "string",
-          "description": "The clinical notes provided by the dentist."
-        },
-        "treatment": {
-          "type": "string",
-          "description": "The treatment performed or planned."
-        },
-        "aiSummary": {
-          "type": "string",
-          "description": "AI generated clinical summary."
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        }
+        "id": { "type": "string" },
+        "patientUserId": { "type": "string" },
+        "professionalId": { "type": "string" },
+        "notes": { "type": "string" },
+        "treatment": { "type": "string" },
+        "aiSummary": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": [
-        "id",
-        "patientUserId",
-        "professionalId",
-        "notes",
-        "createdAt"
-      ]
-    },
-    "Professional": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Professional",
-      "type": "object",
-      "description": "Represents a dental professional (dentist) associated with the clinic.",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "userId": {
-          "type": "string"
-        },
-        "specialty": {
-          "type": "string"
-        },
-        "registrationNumber": {
-          "type": "string"
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "userId",
-        "specialty",
-        "registrationNumber",
-        "createdAt"
-      ]
-    },
-    "Service": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Service",
-      "type": "object",
-      "description": "Represents a dental service offered by the clinic.",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "price": {
-          "type": "number"
-        },
-        "isActive": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "id",
-        "name",
-        "price",
-        "isActive"
-      ]
-    },
-    "Appointment": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Appointment",
-      "type": "object",
-      "description": "Represents a scheduled dental consultation.",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "patientUserId": {
-          "type": "string"
-        },
-        "professionalId": {
-          "type": "string"
-        },
-        "status": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "patientUserId",
-        "professionalId",
-        "status"
-      ]
+      "required": [ "id", "patientUserId", "notes", "createdAt" ]
     }
   },
   "auth": {
-    "providers": [
-      "google"
-    ]
+    "providers": [ "google" ]
   },
   "firestore": {
     "structure": [
@@ -188,40 +73,16 @@
         "path": "/users/{userId}",
         "definition": {
           "entityName": "User",
-          "schema": {
-            "$ref": "#/backend/entities/User"
-          },
-          "description": "User profiles."
+          "schema": { "$ref": "#/backend/entities/User" },
+          "description": "User profiles with authority levels."
         }
       },
       {
         "path": "/medical_records/{recordId}",
         "definition": {
           "entityName": "MedicalRecord",
-          "schema": {
-            "$ref": "#/backend/entities/MedicalRecord"
-          },
-          "description": "Patient clinical history. Accessible by the patient and authorized professionals/admins."
-        }
-      },
-      {
-        "path": "/app_roles/admin/{userId}",
-        "definition": {
-          "entityName": "User",
-          "schema": {
-            "$ref": "#/backend/entities/User"
-          },
-          "description": "Admin role indicator."
-        }
-      },
-      {
-        "path": "/app_roles/professional/{userId}",
-        "definition": {
-          "entityName": "User",
-          "schema": {
-            "$ref": "#/backend/entities/User"
-          },
-          "description": "Professional role indicator."
+          "schema": { "$ref": "#/backend/entities/MedicalRecord" },
+          "description": "Restricted to Level 2 and above."
         }
       }
     ]

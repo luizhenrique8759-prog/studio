@@ -15,7 +15,8 @@ service cloud.firestore {
     }
 
     function getAuthorityLevel() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.authorityLevel;
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc != null ? userDoc.data.authorityLevel : 0;
     }
 
     function isProfessional() {
@@ -33,8 +34,9 @@ service cloud.firestore {
     }
 
     match /medical_records/{recordId} {
+      // Nível 2 (Clínico) e superior podem ver e criar prontuários
       allow get, list, create: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 2);
-      allow update: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 2 && resource.data.professionalId == request.auth.uid);
+      allow update: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 2);
     }
 
     match /app_roles/{role}/{userId} {
@@ -42,7 +44,11 @@ service cloud.firestore {
       allow write: if isAdmin(); 
     }
     
-    match /appointments/{id} { allow read, write: if isSignedIn(); }
+    match /appointments/{id} { 
+      // Nível 1 (Recepção) e superior podem ler e gerenciar a agenda
+      allow read, write: if isSignedIn() && (isProfessional() && getAuthorityLevel() >= 1 || isAdmin()); 
+    }
+    
     match /services/{id} { allow read: if true; allow write: if isAdmin(); }
     match /professionals/{id} { allow read: if true; allow write: if isAdmin(); }
   }

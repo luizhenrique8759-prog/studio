@@ -1,3 +1,4 @@
+
 # Sync Dental Group - Sistema de Agendamento Odontológico
 
 Este é um sistema moderno de gestão odontológica desenvolvido com Next.js, Firebase e Genkit (IA).
@@ -14,24 +15,21 @@ git push -u origin main
 
 ## Funcionalidades Principais
 
-### 1. Portal Administrador Blindado
+### 1. Portal Administrador
 - **Acesso Exclusivo**: Reservado para o e-mail `luizhenrique8759@gmail.com`.
-- **Gestão de Equipe**: Atribuição de níveis de autoridade (1 a 3) para colaboradores.
-- **Financeiro**: Visão consolidada de faturamento e procedimentos.
+- **Gestão de Equipe**: Atribuição de níveis de autoridade para colaboradores.
 
-### 2. Níveis de Autoridade para Colaboradores
-O administrador pode definir o nível de acesso de cada profissional:
-- **Nível 1 (Básico)**: Acesso apenas à visualização e gestão da Agenda.
-- **Nível 2 (Intermediário)**: Acesso à Agenda e aos Prontuários Clínicos (Leitura/Escrita).
-- **Nível 3 (Avançado)**: Acesso total à Agenda, Prontuários e visualização da lista de Equipe.
+### 2. Hierarquia de Autoridade
+O administrador define o nível de acesso de cada profissional:
+- **Nível 1 (Recepção)**: Acesso exclusivo à **Agenda**. Pode visualizar nomes e confirmar horários. Ideal para recepção.
+- **Nível 2 (Clínico)**: Acesso à **Agenda** e aos **Prontuários**. Pode visualizar procedimentos, ficha do paciente e evoluções. Ideal para dentistas e auxiliares.
+- **Nível 3 (Administrativo)**: Acesso total: **Agenda**, **Prontuários**, **Equipe** e **Financeiro** (Faturamento, notas e métricas). Ideal para gerência.
 
 ### 3. Assistente de Evolução Clínica (IA)
-- Geração automática de resumos profissionais a partir de notas brutas do dentista.
-- Sugestão de tratamentos e análise de risco clínico em português (pt-BR).
+- Geração automática de resumos profissionais e sugestão de tratamentos baseada em notas brutas.
 
 ### 4. Experiência do Paciente
-- Agendamento intuitivo com fluxo de confirmação.
-- Painel do paciente para acompanhar consultas agendadas.
+- Agendamento intuitivo e painel para acompanhar consultas.
 
 ## Tecnologias Utilizadas
 - **Frontend**: Next.js 15, Tailwind CSS, ShadCN UI.

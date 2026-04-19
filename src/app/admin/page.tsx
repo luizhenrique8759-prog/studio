@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MOCK_APPOINTMENTS, SERVICES, Appointment, TIME_SLOTS } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, CheckCircle2, Calendar as CalendarIcon, Clock, Users, DollarSign, UserPlus, UserMinus, Shield, Stethoscope, Star } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, CheckCircle2, Calendar as CalendarIcon, Clock, Users, DollarSign, Shield, Stethoscope, Star, Activity } from "lucide-react";
 import { generateClinicalSummary } from "@/ai/flows/generate-clinical-summary";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
@@ -40,7 +40,7 @@ export default function AdminDashboard() {
   const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
   const usersRef = useMemoFirebase(() => {
-    if (!user || !db || user.email !== HARDCODED_ADMIN_EMAIL) return null;
+    if (!user || !db) return null;
     return collection(db, 'users');
   }, [db, user]);
 
@@ -67,10 +67,13 @@ export default function AdminDashboard() {
   const authorityLevel = userData?.authorityLevel || 0;
   const isProfessional = userData?.role === 'professional' || isAdmin;
 
+  // Nível 1: Recepção (Agenda)
+  // Nível 2: Clínico (Agenda + Prontuários)
+  // Nível 3: Administrativo (Agenda + Prontuários + Equipe + Financeiro)
   const canViewRecords = isAdmin || authorityLevel >= 2;
   const canViewManagement = isAdmin || authorityLevel >= 3;
+  const canViewFinance = isAdmin || authorityLevel >= 3;
   const canEditRoles = isAdmin;
-  const canViewFinance = isAdmin;
 
   const handleLogout = async () => {
     if (!auth) return;
@@ -86,7 +89,7 @@ export default function AdminDashboard() {
   const handleToggleProfessional = async (targetUser: any, level: string) => {
     if (!db || !isAdmin) return;
     const isProf = targetUser.role === 'professional';
-    const newRole = isProf && level === "0" ? 'patient' : 'professional';
+    const newRole = level === "0" ? 'patient' : 'professional';
     const newLevel = parseInt(level);
     
     try {
@@ -245,81 +248,82 @@ export default function AdminDashboard() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="management">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <Card className="border-none shadow-2xl rounded-[2rem]">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-3 text-2xl"><Users className="h-6 w-6 text-primary" /> Gestão de Usuários</CardTitle>
-                <CardDescription>Defina autoridade e controle acessos.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {isLoadingUsers ? <Loader2 className="animate-spin" /> : allUsers?.map(u => (
-                    <div key={u.id} className="flex items-center justify-between p-4 border rounded-[1.5rem] hover:bg-muted/5 transition-colors">
-                      <div className="flex items-center gap-4">
-                        <Avatar className="h-10 w-10">
-                          <AvatarFallback className="bg-primary/10 text-primary font-bold">{u.name.substring(0,2)}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-bold">{u.name}</p>
-                          <p className="text-xs text-muted-foreground">{u.email}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <Badge variant={u.role === 'professional' ? 'default' : 'outline'} className="text-[8px] h-4">
-                              {u.role === 'professional' ? `LVL ${u.authorityLevel}` : 'PACIENTE'}
-                            </Badge>
-                          </div>
-                        </div>
-                      </div>
-                      {canEditRoles && (
-                        <Select defaultValue={u.authorityLevel?.toString() || "0"} onValueChange={(val) => handleToggleProfessional(u, val)}>
-                          <SelectTrigger className="w-[140px] rounded-full text-xs">
-                            <SelectValue placeholder="Nível" />
-                          </SelectTrigger>
-                          <SelectContent className="rounded-xl">
-                            <SelectItem value="0">Paciente</SelectItem>
-                            <SelectItem value="1">Lvl 1 - Agenda</SelectItem>
-                            <SelectItem value="2">Lvl 2 - Prontuário</SelectItem>
-                            <SelectItem value="3">Lvl 3 - Equipe</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-none shadow-2xl rounded-[2rem] bg-primary text-white">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-3 text-2xl"><ShieldAlert className="h-6 w-6" /> Equipe por Nível</CardTitle>
-                <CardDescription className="text-white/70">Visualização das permissões ativas.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {[1, 2, 3].map(lvl => (
-                    <div key={lvl} className="space-y-2">
-                      <p className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-2">Nível {lvl}</p>
-                      {allUsers?.filter(u => u.role === 'professional' && u.authorityLevel === lvl).map(u => (
-                        <div key={u.id} className="flex items-center gap-4 p-4 bg-white/10 rounded-2xl backdrop-blur-sm border border-white/20">
-                          <Avatar className="h-10 w-10 border-2 border-white">
-                            <AvatarFallback className="bg-white text-primary font-bold">{u.name.substring(0,2)}</AvatarFallback>
+        {canViewManagement && (
+          <TabsContent value="management">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <Card className="border-none shadow-2xl rounded-[2rem]">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-3 text-2xl"><Users className="h-6 w-6 text-primary" /> Gestão de Usuários</CardTitle>
+                  <CardDescription>Defina autoridade e controle acessos.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {isLoadingUsers ? <Loader2 className="animate-spin" /> : allUsers?.map(u => (
+                      <div key={u.id} className="flex items-center justify-between p-4 border rounded-[1.5rem] hover:bg-muted/5 transition-colors">
+                        <div className="flex items-center gap-4">
+                          <Avatar className="h-10 w-10">
+                            <AvatarFallback className="bg-primary/10 text-primary font-bold">{u.name.substring(0,2)}</AvatarFallback>
                           </Avatar>
                           <div>
                             <p className="font-bold">{u.name}</p>
-                            <p className="text-xs opacity-70">Acesso Nível {lvl} Ativo</p>
+                            <p className="text-xs text-muted-foreground">{u.email}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant={u.role === 'professional' ? 'default' : 'outline'} className="text-[8px] h-4">
+                                {u.role === 'professional' ? `LVL ${u.authorityLevel}` : 'PACIENTE'}
+                              </Badge>
+                            </div>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  ))}
-                  {allUsers?.filter(u => u.role === 'professional').length === 0 && (
-                    <p className="text-center py-10 opacity-50">Nenhum colaborador definido ainda.</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
+                        {canEditRoles && (
+                          <Select defaultValue={u.authorityLevel?.toString() || "0"} onValueChange={(val) => handleToggleProfessional(u, val)}>
+                            <SelectTrigger className="w-[140px] rounded-full text-xs">
+                              <SelectValue placeholder="Nível" />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl">
+                              <SelectItem value="0">Paciente</SelectItem>
+                              <SelectItem value="1">Lvl 1 - Recepção</SelectItem>
+                              <SelectItem value="2">Lvl 2 - Clínico</SelectItem>
+                              <SelectItem value="3">Lvl 3 - Adm</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-none shadow-2xl rounded-[2rem] bg-primary text-white">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-3 text-2xl"><ShieldAlert className="h-6 w-6" /> Equipe por Nível</CardTitle>
+                  <CardDescription className="text-white/70">Visualização das permissões ativas.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {[1, 2, 3].map(lvl => (
+                      <div key={lvl} className="space-y-2">
+                        <p className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-2">
+                          {lvl === 1 ? 'RECEPÇÃO' : lvl === 2 ? 'CLÍNICO' : 'ADMINISTRATIVO'}
+                        </p>
+                        {allUsers?.filter(u => u.role === 'professional' && u.authorityLevel === lvl).map(u => (
+                          <div key={u.id} className="flex items-center gap-4 p-4 bg-white/10 rounded-2xl backdrop-blur-sm border border-white/20">
+                            <Avatar className="h-10 w-10 border-2 border-white">
+                              <AvatarFallback className="bg-white text-primary font-bold">{u.name.substring(0,2)}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-bold">{u.name}</p>
+                              <p className="text-xs opacity-70">Acesso Nível {lvl} Ativo</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+        )}
 
         {canViewFinance && (
           <TabsContent value="billing">
@@ -328,23 +332,25 @@ export default function AdminDashboard() {
                 <div className="flex justify-between items-center">
                   <div>
                     <CardTitle className="flex items-center gap-3 text-2xl"><DollarSign className="h-7 w-7 text-primary" /> Painel Financeiro</CardTitle>
-                    <CardDescription>Resumo bruto baseado em agendamentos confirmados.</CardDescription>
+                    <CardDescription>Gestão de faturamento e métricas administrativas.</CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="pt-8 space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="p-8 bg-primary/10 rounded-[2rem] border-2 border-primary/20 flex flex-col items-center text-center">
-                    <p className="text-xs uppercase font-black text-primary/60 tracking-widest mb-2">Faturamento Estimado</p>
+                    <p className="text-xs uppercase font-black text-primary/60 tracking-widest mb-2">Faturamento Bruto</p>
                     <p className="text-5xl font-black text-primary">R$ {totalBilling.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                   </div>
                   <div className="p-8 bg-muted rounded-[2rem] border flex flex-col items-center text-center">
-                    <p className="text-xs uppercase font-black text-muted-foreground tracking-widest mb-2">Procedimentos Totais</p>
+                    <p className="text-xs uppercase font-black text-muted-foreground tracking-widest mb-2">Volume de Pacientes</p>
                     <p className="text-5xl font-black">{appointments.length}</p>
                   </div>
                   <div className="p-8 bg-accent/10 rounded-[2rem] border-2 border-accent/20 flex flex-col items-center text-center">
-                    <p className="text-xs uppercase font-black text-accent/60 tracking-widest mb-2">Confirmações</p>
-                    <p className="text-5xl font-black text-accent">{appointments.filter(a => a.status === 'confirmed').length}</p>
+                    <p className="text-xs uppercase font-black text-accent/60 tracking-widest mb-2">Insumos & Gastos</p>
+                    <div className="flex items-center gap-2">
+                       <p className="text-5xl font-black text-accent">R$ 0,00</p>
+                    </div>
                   </div>
                 </div>
                 
@@ -378,98 +384,100 @@ export default function AdminDashboard() {
           </TabsContent>
         )}
 
-        <TabsContent value="records">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <Card className="md:col-span-1 border-none shadow-2xl rounded-[2rem] h-[600px] flex flex-col">
-              <CardHeader className="pb-4">
-                <div className="relative">
-                  <Search className="absolute left-4 top-3.5 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="Localizar paciente..." className="pl-12 h-12 rounded-2xl bg-muted/30 border-none focus:ring-2 focus:ring-primary/50" value={searchPatient} onChange={(e) => setSearchPatient(e.target.value)} />
-                </div>
-              </CardHeader>
-              <CardContent className="flex-1 overflow-y-auto space-y-3 px-4 pb-4">
-                {allUsers?.filter(u => u.name.toLowerCase().includes(searchPatient.toLowerCase())).map(u => (
-                  <div 
-                    key={u.id} 
-                    className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center gap-3 ${selectedPatientRecord?.id === u.id ? 'bg-primary/5 border-primary shadow-inner scale-[0.98]' : 'hover:border-primary/30 hover:bg-muted/5'}`}
-                    onClick={() => setSelectedPatientRecord({ id: u.id, name: u.name })}
-                  >
-                    <Avatar className="h-10 w-10">
-                      <AvatarFallback className="bg-muted text-xs font-bold">{u.name.substring(0,2)}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-bold text-sm">{u.name}</p>
-                      <p className="text-[10px] text-muted-foreground uppercase font-black">{u.email}</p>
-                    </div>
+        {canViewRecords && (
+          <TabsContent value="records">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <Card className="md:col-span-1 border-none shadow-2xl rounded-[2rem] h-[600px] flex flex-col">
+                <CardHeader className="pb-4">
+                  <div className="relative">
+                    <Search className="absolute left-4 top-3.5 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="Localizar paciente..." className="pl-12 h-12 rounded-2xl bg-muted/30 border-none focus:ring-2 focus:ring-primary/50" value={searchPatient} onChange={(e) => setSearchPatient(e.target.value)} />
                   </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card className="md:col-span-2 border-none shadow-2xl rounded-[2rem] overflow-hidden">
-              {selectedPatientRecord ? (
-                <div className="h-full flex flex-col">
-                  <CardHeader className="bg-muted/10 border-b flex flex-row items-center justify-between py-8 px-10">
-                    <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary"><ClipboardList className="h-6 w-6" /></div>
+                </CardHeader>
+                <CardContent className="flex-1 overflow-y-auto space-y-3 px-4 pb-4">
+                  {allUsers?.filter(u => u.name.toLowerCase().includes(searchPatient.toLowerCase())).map(u => (
+                    <div 
+                      key={u.id} 
+                      className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center gap-3 ${selectedPatientRecord?.id === u.id ? 'bg-primary/5 border-primary shadow-inner scale-[0.98]' : 'hover:border-primary/30 hover:bg-muted/5'}`}
+                      onClick={() => setSelectedPatientRecord({ id: u.id, name: u.name })}
+                    >
+                      <Avatar className="h-10 w-10">
+                        <AvatarFallback className="bg-muted text-xs font-bold">{u.name.substring(0,2)}</AvatarFallback>
+                      </Avatar>
                       <div>
-                        <CardTitle className="text-3xl font-headline">{selectedPatientRecord.name}</CardTitle>
-                        <CardDescription className="font-black uppercase tracking-widest text-[10px] text-primary">Evolução Clínica e Prontuário</CardDescription>
+                        <p className="font-bold text-sm">{u.name}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase font-black">{u.email}</p>
                       </div>
                     </div>
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button className="rounded-full h-12 px-8 bg-primary hover:scale-105 transition-transform"><Plus className="mr-2 h-5 w-5" /> Nova Evolução</Button>
-                      </DialogTrigger>
-                      <DialogContent className="sm:max-w-[700px] rounded-[2rem]">
-                        <DialogHeader>
-                          <DialogTitle className="text-2xl">Nova Evolução Clínica</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-6 py-6">
-                          <Textarea 
-                            placeholder="Descreva aqui as notas clínicas, procedimentos realizados e observações..." 
-                            className="min-h-[250px] rounded-2xl p-6 text-lg border-muted bg-muted/10"
-                            value={newNote}
-                            onChange={(e) => setNewNote(e.target.value)}
-                          />
-                          {aiAnalysis && (
-                            <div className="p-6 bg-accent/5 rounded-3xl border-2 border-accent/20 animate-in slide-in-from-bottom-4">
-                              <p className="text-xs font-black mb-4 uppercase text-accent tracking-widest flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> Análise IA Concluída:</p>
-                              <div className="space-y-4">
-                                <p className="text-sm leading-relaxed">{aiAnalysis.summary}</p>
-                                <div className="p-4 bg-white/50 rounded-xl">
-                                  <p className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Tratamento Sugerido:</p>
-                                  <p className="text-xs italic">{aiAnalysis.suggestedTreatment}</p>
+                  ))}
+                </CardContent>
+              </Card>
+
+              <Card className="md:col-span-2 border-none shadow-2xl rounded-[2rem] overflow-hidden">
+                {selectedPatientRecord ? (
+                  <div className="h-full flex flex-col">
+                    <CardHeader className="bg-muted/10 border-b flex flex-row items-center justify-between py-8 px-10">
+                      <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary"><ClipboardList className="h-6 w-6" /></div>
+                        <div>
+                          <CardTitle className="text-3xl font-headline">{selectedPatientRecord.name}</CardTitle>
+                          <CardDescription className="font-black uppercase tracking-widest text-[10px] text-primary">Evolução Clínica e Ficha do Paciente</CardDescription>
+                        </div>
+                      </div>
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button className="rounded-full h-12 px-8 bg-primary hover:scale-105 transition-transform"><Plus className="mr-2 h-5 w-5" /> Nova Evolução</Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[700px] rounded-[2rem]">
+                          <DialogHeader>
+                            <DialogTitle className="text-2xl">Nova Evolução Clínica</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-6 py-6">
+                            <Textarea 
+                              placeholder="Descreva aqui as notas clínicas, procedimentos realizados e observações..." 
+                              className="min-h-[250px] rounded-2xl p-6 text-lg border-muted bg-muted/10"
+                              value={newNote}
+                              onChange={(e) => setNewNote(e.target.value)}
+                            />
+                            {aiAnalysis && (
+                              <div className="p-6 bg-accent/5 rounded-3xl border-2 border-accent/20 animate-in slide-in-from-bottom-4">
+                                <p className="text-xs font-black mb-4 uppercase text-accent tracking-widest flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> Análise IA Concluída:</p>
+                                <div className="space-y-4">
+                                  <p className="text-sm leading-relaxed">{aiAnalysis.summary}</p>
+                                  <div className="p-4 bg-white/50 rounded-xl">
+                                    <p className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Tratamento Sugerido:</p>
+                                    <p className="text-xs italic">{aiAnalysis.suggestedTreatment}</p>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          )}
-                        </div>
-                        <DialogFooter className="gap-2">
-                          <Button variant="outline" className="rounded-full h-12" onClick={analyzeClinicalNote} disabled={loading === 'ai-analysis'}>
-                            {loading === 'ai-analysis' ? <Loader2 className="animate-spin mr-2" /> : "Assistente IA"}
-                          </Button>
-                          <Button className="rounded-full h-12 px-10" onClick={() => {toast({title:"Salvo!"}); setNewNote(""); setAiAnalysis(null)}}>Finalizar Evolução</Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  </CardHeader>
-                  <CardContent className="p-10 flex flex-col items-center justify-center flex-1">
-                    <div className="text-center space-y-4 max-w-sm">
-                      <div className="mx-auto h-20 w-20 bg-muted/50 rounded-full flex items-center justify-center text-muted-foreground"><Clock className="h-10 w-10" /></div>
-                      <p className="text-muted-foreground text-lg">Histórico clínico carregado para este paciente.</p>
-                    </div>
-                  </CardContent>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-40 opacity-10">
-                  <Stethoscope className="h-32 w-32 mb-4" />
-                  <p className="text-2xl font-black uppercase tracking-[0.2em]">Selecione um Paciente</p>
-                </div>
-              )}
-            </Card>
-          </div>
-        </TabsContent>
+                            )}
+                          </div>
+                          <DialogFooter className="gap-2">
+                            <Button variant="outline" className="rounded-full h-12" onClick={analyzeClinicalNote} disabled={loading === 'ai-analysis'}>
+                              {loading === 'ai-analysis' ? <Loader2 className="animate-spin mr-2" /> : "Assistente IA"}
+                            </Button>
+                            <Button className="rounded-full h-12 px-10" onClick={() => {toast({title:"Salvo!"}); setNewNote(""); setAiAnalysis(null)}}>Finalizar Evolução</Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    </CardHeader>
+                    <CardContent className="p-10 flex flex-col items-center justify-center flex-1">
+                      <div className="text-center space-y-4 max-w-sm">
+                        <div className="mx-auto h-20 w-20 bg-muted/50 rounded-full flex items-center justify-center text-muted-foreground"><Activity className="h-10 w-10" /></div>
+                        <p className="text-muted-foreground text-lg">Histórico clínico e ficha completa carregados.</p>
+                      </div>
+                    </CardContent>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-40 opacity-10">
+                    <Stethoscope className="h-32 w-32 mb-4" />
+                    <p className="text-2xl font-black uppercase tracking-[0.2em]">Selecione um Paciente</p>
+                  </div>
+                )}
+              </Card>
+            </div>
+          </TabsContent>
+        )}
       </Tabs>
 
       <Dialog open={!!reschedulingAppointment} onOpenChange={(open) => !open && setReschedulingAppointment(null)}>
