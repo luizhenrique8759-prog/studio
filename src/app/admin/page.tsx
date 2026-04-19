@@ -6,9 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MOCK_APPOINTMENTS, SERVICES, Appointment } from "@/lib/mock-data";
+import { MOCK_APPOINTMENTS, SERVICES, Appointment, TIME_SLOTS } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, Sparkles, CheckCircle2 } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, Sparkles, CheckCircle2, Calendar as CalendarIcon, Clock } from "lucide-react";
 import { generateClinicalSummary } from "@/ai/flows/generate-clinical-summary";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser } from '@/firebase';
@@ -18,6 +18,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 const HARDCODED_ADMIN_EMAIL = "luizhenrique8759@gmail.com";
 
@@ -33,6 +37,11 @@ export default function AdminDashboard() {
   const [selectedPatientRecord, setSelectedPatientRecord] = useState<{id: string, name: string} | null>(null);
   const [newNote, setNewNote] = useState("");
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
+
+  // Estados para reagendamento
+  const [reschedulingAppointment, setReschedulingAppointment] = useState<Appointment | null>(null);
+  const [newDate, setNewDate] = useState<Date | undefined>(undefined);
+  const [newTime, setNewTime] = useState<string>("");
 
   useEffect(() => {
     if (!isUserLoading && !user) {
@@ -61,6 +70,25 @@ export default function AdminDashboard() {
       title: "Agendamento Confirmado",
       description: "O status do paciente foi atualizado com sucesso.",
     });
+  };
+
+  const handleRescheduleSubmit = () => {
+    if (!reschedulingAppointment || !newDate || !newTime) return;
+
+    setAppointments(prev => prev.map(apt => 
+      apt.id === reschedulingAppointment.id 
+        ? { ...apt, date: format(newDate, "yyyy-MM-dd"), time: newTime, status: 'pending' as const } 
+        : apt
+    ));
+
+    toast({
+      title: "Reagendamento Concluído",
+      description: `Nova data: ${format(newDate, "dd/MM/yyyy")} às ${newTime}`,
+    });
+
+    setReschedulingAppointment(null);
+    setNewDate(undefined);
+    setNewTime("");
   };
 
   const analyzeClinicalNote = async () => {
@@ -178,19 +206,30 @@ export default function AdminDashboard() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        {apt.status === 'pending' && (
+                        <div className="flex justify-end gap-2">
+                          {apt.status === 'pending' && (
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              className="text-accent hover:text-accent hover:bg-accent/10 rounded-full"
+                              onClick={() => handleConfirmAppointment(apt.id)}
+                            >
+                              <CheckCircle2 className="h-4 w-4 mr-1" /> Confirmar
+                            </Button>
+                          )}
                           <Button 
                             size="sm" 
                             variant="ghost" 
-                            className="text-accent hover:text-accent hover:bg-accent/10 rounded-full"
-                            onClick={() => handleConfirmAppointment(apt.id)}
+                            className="text-primary hover:bg-primary/10 rounded-full"
+                            onClick={() => {
+                              setReschedulingAppointment(apt);
+                              setNewDate(new Date(apt.date));
+                              setNewTime(apt.time);
+                            }}
                           >
-                            <CheckCircle2 className="h-4 w-4 mr-1" /> Confirmar
+                            <CalendarIcon className="h-4 w-4 mr-1" /> Reagendar
                           </Button>
-                        )}
-                        {apt.status === 'confirmed' && (
-                          <span className="text-[10px] text-muted-foreground italic mr-4">Atendido</span>
-                        )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -299,6 +338,50 @@ export default function AdminDashboard() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Dialog de Reagendamento */}
+      <Dialog open={!!reschedulingAppointment} onOpenChange={(open) => !open && setReschedulingAppointment(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Reagendar Paciente</DialogTitle>
+            <DialogDescription>
+              Selecione uma nova data e horário para {reschedulingAppointment?.patientName}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="flex flex-col items-center">
+              <Calendar
+                mode="single"
+                selected={newDate}
+                onSelect={setNewDate}
+                className="rounded-md border"
+                locale={ptBR}
+              />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm font-bold flex items-center gap-2">
+                <Clock className="w-4 h-4" /> Horário Disponível
+              </label>
+              <Select value={newTime} onValueChange={setNewTime}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o horário" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIME_SLOTS.map(t => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReschedulingAppointment(null)}>Cancelar</Button>
+            <Button onClick={handleRescheduleSubmit} disabled={!newDate || !newTime}>
+              Confirmar Reagendamento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
