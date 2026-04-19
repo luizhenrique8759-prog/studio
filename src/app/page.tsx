@@ -1,6 +1,8 @@
 
 "use client";
 
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import { 
@@ -16,6 +18,7 @@ import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
 
 export default function LandingPage() {
+  const router = useRouter();
   const { user, isUserLoading } = useUser();
   const db = useFirestore();
 
@@ -26,8 +29,16 @@ export default function LandingPage() {
 
   const { data: userData, isLoading: isLoadingDoc } = useDoc(userDocRef);
 
-  const authorityLevel = userData?.authorityLevel || 0;
-  const isProfessional = authorityLevel >= 1;
+  // Redirecionamento automático se já estiver logado
+  useEffect(() => {
+    if (!isUserLoading && !isLoadingDoc && user && userData) {
+      if (userData.authorityLevel >= 1) {
+        router.push('/admin');
+      } else {
+        router.push('/dashboard');
+      }
+    }
+  }, [user, userData, isUserLoading, isLoadingDoc, router]);
 
   const renderAuthButtons = () => {
     if (isUserLoading || isLoadingDoc) return <Loader2 className="animate-spin h-5 w-5 text-primary" />;
@@ -43,23 +54,7 @@ export default function LandingPage() {
       );
     }
 
-    return (
-      <div className="flex flex-wrap gap-4 justify-center md:justify-end">
-        <Button asChild variant="outline" className="rounded-full px-8 h-12 border-2 font-bold hover:bg-primary/5">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <Activity className="h-5 w-5 text-primary" /> Meu Painel de Paciente
-          </Link>
-        </Button>
-
-        {isProfessional && (
-          <Button asChild className="rounded-full px-8 h-12 bg-primary text-white shadow-xl font-bold">
-            <Link href="/admin" className="flex items-center gap-2">
-              <Shield className="h-5 w-5" /> Portal Profissional
-            </Link>
-          </Button>
-        )}
-      </div>
-    );
+    return null; // O useEffect cuidará do redirecionamento
   };
 
   return (

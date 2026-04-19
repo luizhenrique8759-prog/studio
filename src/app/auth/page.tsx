@@ -19,9 +19,8 @@ export default function AuthPage() {
   const { toast } = useToast();
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Mapeamento de e-mails administrativos e seus níveis
   const ADMIN_CONFIG: Record<string, { level: number, role: string }> = {
-    "luizhenrique8759@gmail.com": { level: 4, role: 'admin' },
+    "luizhenrique8759@gmail.com": { level: 4, role: 'dentist' },
     "luiz87596531@gmail.com": { level: 3, role: 'admin' }
   };
 
@@ -39,23 +38,25 @@ export default function AuthPage() {
       const userSnap = await getDoc(userRef);
       
       const adminSettings = ADMIN_CONFIG[userEmail];
+      let authorityLevel = 0;
       
       if (!userSnap.exists()) {
+        authorityLevel = adminSettings ? adminSettings.level : 0;
         const newUserData = {
           id: user.uid,
           name: user.displayName || 'Usuário',
           email: userEmail,
           role: adminSettings ? adminSettings.role : 'patient',
-          authorityLevel: adminSettings ? adminSettings.level : 0,
+          authorityLevel: authorityLevel,
           photoURL: user.photoURL,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
         await setDoc(userRef, newUserData);
         toast({ title: "Bem-vindo!", description: "Sua conta foi criada com sucesso." });
-        router.push(adminSettings ? '/admin' : '/dashboard');
       } else {
         const existingData = userSnap.data();
+        authorityLevel = adminSettings ? adminSettings.level : (existingData.authorityLevel || 0);
         
         const updatePayload: any = {
           name: user.displayName || existingData.name,
@@ -63,24 +64,22 @@ export default function AuthPage() {
           updatedAt: new Date().toISOString(),
         };
 
-        // Garante que os administradores sempre tenham o nível correto ao logar
         if (adminSettings && existingData.authorityLevel !== adminSettings.level) {
           updatePayload.authorityLevel = adminSettings.level;
           updatePayload.role = adminSettings.role;
         }
 
         await updateDoc(userRef, updatePayload);
-        
         toast({ title: "Login realizado", description: `Bem-vindo de volta, ${user.displayName}!` });
-        
-        // Redireciona para admin se tiver nível 1 ou superior
-        const currentLevel = adminSettings ? adminSettings.level : (existingData.authorityLevel || 0);
-        if (currentLevel >= 1) {
-          router.push('/admin');
-        } else {
-          router.push('/dashboard');
-        }
       }
+
+      // Redirecionamento direto baseado no nível
+      if (authorityLevel >= 1) {
+        router.push('/admin');
+      } else {
+        router.push('/dashboard');
+      }
+
     } catch (error: any) {
       console.error(error);
       toast({
