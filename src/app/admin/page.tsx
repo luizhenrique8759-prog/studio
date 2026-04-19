@@ -8,9 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MOCK_APPOINTMENTS, SERVICES, Appointment, TIME_SLOTS } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, Sparkles, CheckCircle2, Calendar as CalendarIcon, Clock, Users, DollarSign, UserPlus, UserMinus } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, CheckCircle2, Calendar as CalendarIcon, Clock, Users, DollarSign, UserPlus, UserMinus } from "lucide-react";
 import { generateClinicalSummary } from "@/ai/flows/generate-clinical-summary";
-import { generateBillingSummary } from "@/ai/flows/generate-billing-summary";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { signOut } from 'firebase/auth';
@@ -32,23 +31,16 @@ export default function AdminDashboard() {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
   
-  // Queries do Firebase
   const usersRef = useMemoFirebase(() => collection(db, 'users'), [db]);
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
 
-  const rolesRef = useMemoFirebase(() => collection(db, 'app_roles/professional/users'), [db]);
-  // Nota: Estrutura app_roles/professional/{userId} implica que listamos a subcoleção ou verificamos os documentos
-  // Para simplificar a gestão, vamos buscar todos os usuários e verificar o campo 'role'
-  
   const [appointments, setAppointments] = useState<Appointment[]>(MOCK_APPOINTMENTS);
   const [loading, setLoading] = useState<string | null>(null);
   const [searchPatient, setSearchPatient] = useState("");
   const [selectedPatientRecord, setSelectedPatientRecord] = useState<{id: string, name: string} | null>(null);
   const [newNote, setNewNote] = useState("");
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
-  const [billingResult, setBillingResult] = useState<any>(null);
 
-  // Estados para reagendamento
   const [reschedulingAppointment, setReschedulingAppointment] = useState<Appointment | null>(null);
   const [newDate, setNewDate] = useState<Date | undefined>(undefined);
   const [newTime, setNewTime] = useState<string>("");
@@ -78,11 +70,9 @@ export default function AdminDashboard() {
     const newRole = isProf ? 'patient' : 'professional';
     
     try {
-      // 1. Atualizar o documento do usuário
       const userRef = doc(db, 'users', targetUser.id);
       await updateDoc(userRef, { role: newRole });
 
-      // 2. Criar/Remover o indicador de role
       const roleRef = doc(db, 'app_roles', 'professional', 'users', targetUser.id);
       if (newRole === 'professional') {
         await setDoc(roleRef, { active: true, assignedAt: new Date().toISOString() });
@@ -99,33 +89,19 @@ export default function AdminDashboard() {
     }
   };
 
-  const generateReport = async () => {
-    setLoading('billing');
-    try {
-      const result = await generateBillingSummary({
-        patientId: "Geral",
-        patientName: "Relatório Mensal",
-        appointments: appointments.map(a => ({
-          appointmentId: a.id,
-          date: a.date,
-          serviceDescription: SERVICES.find(s => s.id === a.serviceId)?.name || "Serviço",
-          cost: SERVICES.find(s => s.id === a.serviceId)?.price || 0
-        }))
-      });
-      setBillingResult(result);
-    } catch (error) {
-      toast({ variant: "destructive", title: "Erro Financeiro", description: "Não foi possível gerar o resumo." });
-    } finally {
-      setLoading(null);
-    }
-  };
-
   const handleConfirmAppointment = (id: string) => {
     setAppointments(prev => prev.map(apt => 
       apt.id === id ? { ...apt, status: 'confirmed' as const } : apt
     ));
     toast({ title: "Agendamento Confirmado" });
   };
+
+  const totalBilling = useMemo(() => {
+    return appointments.reduce((acc, apt) => {
+      const service = SERVICES.find(s => s.id === apt.serviceId);
+      return acc + (service?.price || 0);
+    }, 0);
+  }, [appointments]);
 
   const availableDates = useMemo(() => {
     const dates = [];
@@ -298,36 +274,44 @@ export default function AdminDashboard() {
         <TabsContent value="billing">
           <Card className="border-none shadow-lg overflow-hidden">
             <CardHeader className="bg-primary/5 border-b">
-              <div className="flex justify-between items-center">
-                <CardTitle className="flex items-center gap-2"><DollarSign className="h-5 w-5" /> Faturamento Inteligente</CardTitle>
-                <Button onClick={generateReport} disabled={loading === 'billing'} className="rounded-full bg-accent hover:bg-accent/90">
-                  {loading === 'billing' ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
-                  Gerar Fechamento IA
-                </Button>
-              </div>
+              <CardTitle className="flex items-center gap-2"><DollarSign className="h-5 w-5" /> Resumo Financeiro</CardTitle>
+              <CardDescription>Acompanhamento manual dos procedimentos e faturamento.</CardDescription>
             </CardHeader>
-            <CardContent className="pt-6">
-              {billingResult ? (
-                <div className="space-y-6 animate-in fade-in zoom-in duration-500">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="p-4 bg-muted rounded-2xl">
-                      <p className="text-xs uppercase font-bold text-muted-foreground">Total do Período</p>
-                      <p className="text-3xl font-bold text-primary">R$ {billingResult.totalCost.toFixed(2)}</p>
-                    </div>
-                  </div>
-                  <div className="p-6 bg-accent/5 rounded-3xl border border-accent/20">
-                    <h3 className="font-headline font-bold mb-4 flex items-center gap-2">Resumo Consolidado</h3>
-                    <div className="prose prose-sm max-w-none text-muted-foreground whitespace-pre-wrap">
-                      {billingResult.billingSummary}
-                    </div>
-                  </div>
+            <CardContent className="pt-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 bg-primary/10 rounded-2xl border border-primary/20">
+                  <p className="text-xs uppercase font-bold text-muted-foreground">Total Bruto</p>
+                  <p className="text-3xl font-bold text-primary">R$ {totalBilling.toFixed(2)}</p>
                 </div>
-              ) : (
-                <div className="text-center py-20 text-muted-foreground">
-                  <DollarSign className="h-12 w-12 mx-auto mb-4 opacity-10" />
-                  <p>Clique no botão acima para consolidar os dados financeiros.</p>
+                <div className="p-4 bg-muted rounded-2xl border">
+                  <p className="text-xs uppercase font-bold text-muted-foreground">Procedimentos</p>
+                  <p className="text-3xl font-bold">{appointments.length}</p>
                 </div>
-              )}
+              </div>
+              
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Paciente</TableHead>
+                    <TableHead>Serviço</TableHead>
+                    <TableHead className="text-right">Valor</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {appointments.map((apt) => {
+                    const service = SERVICES.find(s => s.id === apt.serviceId);
+                    return (
+                      <TableRow key={apt.id}>
+                        <TableCell className="text-xs">{apt.date}</TableCell>
+                        <TableCell className="font-medium">{apt.patientName}</TableCell>
+                        <TableCell className="text-xs">{service?.name}</TableCell>
+                        <TableCell className="text-right font-bold">R$ {service?.price.toFixed(2)}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
@@ -407,7 +391,6 @@ export default function AdminDashboard() {
         </TabsContent>
       </Tabs>
 
-      {/* Reagendamento */}
       <Dialog open={!!reschedulingAppointment} onOpenChange={(open) => !open && setReschedulingAppointment(null)}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
