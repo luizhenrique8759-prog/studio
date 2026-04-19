@@ -49,13 +49,13 @@ export default function AuthPage() {
         };
         await setDoc(userRef, newUserData);
         
-        // Se for admin blindado, também garantir a role no documento de permissão
+        // Se for admin, também garantir a role no documento de permissão
         if (user.email === HARDCODED_ADMIN_EMAIL) {
           const roleRef = doc(db, 'app_roles', 'admin', 'users', user.uid);
           await setDoc(roleRef, { active: true, assignedAt: new Date().toISOString() });
         }
       } else {
-        // Se o email é o blindado, forçar o role admin na memória para o redirecionamento
+        // Se o email é o administrativo, forçar o role admin na memória para o redirecionamento
         if (user.email === HARDCODED_ADMIN_EMAIL) {
           role = 'admin';
         } else {
@@ -64,7 +64,7 @@ export default function AuthPage() {
       }
 
       toast({
-        title: user.email === HARDCODED_ADMIN_EMAIL ? "Acesso Blindado Confirmado" : "Acesso Autorizado",
+        title: user.email === HARDCODED_ADMIN_EMAIL ? "Acesso Administrador Confirmado" : "Acesso Autorizado",
         description: `Bem-vindo, ${user.displayName}!`,
       });
 
@@ -154,7 +154,7 @@ export default function AuthPage() {
           </CardContent>
           <CardFooter className="bg-slate-50/50 p-8">
             <p className="text-center w-full text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 leading-relaxed px-6">
-              Acesso administrativo blindado para <span className="text-primary">{HARDCODED_ADMIN_EMAIL}</span>
+              Acesso administrativo para <span className="text-primary">{HARDCODED_ADMIN_EMAIL}</span>
             </p>
           </CardFooter>
         </Card>

@@ -56,7 +56,7 @@ export default function LandingPage() {
       return (
         <Button asChild className={`rounded-full px-8 h-12 bg-primary shadow-2xl shadow-primary/40 border-2 border-white/20 font-bold ${className}`}>
           <Link href="/admin" className="flex items-center gap-2">
-            <Shield className="h-5 w-5 fill-current" /> Portal Administrador Blindado
+            <Shield className="h-5 w-5 fill-current" /> Portal Administrador
           </Link>
         </Button>
       );

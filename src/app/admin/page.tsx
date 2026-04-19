@@ -40,7 +40,7 @@ export default function AdminDashboard() {
   const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
   const usersRef = useMemoFirebase(() => {
-    if (!user || !db) return null;
+    if (!user || !db || user.email !== HARDCODED_ADMIN_EMAIL) return null;
     return collection(db, 'users');
   }, [db, user]);
 
@@ -67,11 +67,10 @@ export default function AdminDashboard() {
   const authorityLevel = userData?.authorityLevel || 0;
   const isProfessional = userData?.role === 'professional' || isAdmin;
 
-  // Permissões Baseadas em Nível
   const canViewRecords = isAdmin || authorityLevel >= 2;
   const canViewManagement = isAdmin || authorityLevel >= 3;
-  const canEditRoles = isAdmin; // Apenas Admin Blindado
-  const canViewFinance = isAdmin; // Apenas Admin Blindado
+  const canEditRoles = isAdmin;
+  const canViewFinance = isAdmin;
 
   const handleLogout = async () => {
     if (!auth) return;
@@ -177,7 +176,7 @@ export default function AdminDashboard() {
           </Avatar>
           <div>
             <h1 className="text-4xl font-headline font-bold text-primary tracking-tight">
-              {isAdmin ? 'Portal Administrador Blindado' : `Portal do Colaborador (Lvl ${authorityLevel})`}
+              {isAdmin ? 'Portal Administrador' : `Portal do Colaborador (Lvl ${authorityLevel})`}
             </h1>
             <p className="text-muted-foreground flex items-center gap-2 font-medium">
               {isAdmin ? <Shield className="h-4 w-4 text-primary fill-primary/20" /> : <Stethoscope className="h-4 w-4" />} {user.email}
