@@ -33,7 +33,9 @@ export default function AdminDashboard() {
   const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
   const authorityLevel = useMemo(() => {
-    if (user?.email === "luizhenrique8759@gmail.com") return 4;
+    const email = user?.email;
+    if (email === "luizhenrique8759@gmail.com") return 4;
+    if (email === "luiz87596531@gmail.com") return 3;
     return userData?.authorityLevel || 0;
   }, [userData, user]);
 

@@ -7,52 +7,60 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Administrador Mestre (Acesso Root)
+    // Administradores Mestre (Emails com autoridade Root no sistema)
     function isMasterAdmin() {
-      return isSignedIn() && request.auth.token.email == "luizhenrique8759@gmail.com";
+      return isSignedIn() && (
+        request.auth.token.email == "luizhenrique8759@gmail.com" ||
+        request.auth.token.email == "luiz87596531@gmail.com"
+      );
     }
 
-    // Busca autoridade do usuário logado no documento
+    // Busca autoridade do usuário logado no banco de dados
     function getAuthority() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.authorityLevel;
     }
 
-    // Usuários: Próprio ou Administradores (Nível 3+)
+    // Regra de prioridade administrativa: Admins Mestres têm bypass total
+    function hasAdminPrivileges() {
+      return isMasterAdmin() || (isSignedIn() && getAuthority() >= 3);
+    }
+
+    // Usuários: Próprio ou Administradores
     match /users/{userId} {
       allow get: if isSignedIn();
-      allow list: if isMasterAdmin() || (isSignedIn() && getAuthority() >= 3);
+      allow list: if hasAdminPrivileges();
       allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isMasterAdmin() || (isSignedIn() && (request.auth.uid == userId || getAuthority() >= 3));
+      allow update: if hasAdminPrivileges() || (isSignedIn() && request.auth.uid == userId);
     }
 
     // Agendamentos (Appointments)
     match /appointments/{apptId} {
-      allow list: if isMasterAdmin() || (isSignedIn() && (
+      allow list: if hasAdminPrivileges() || (isSignedIn() && (
         getAuthority() >= 1 || 
         resource.data.patientId == request.auth.uid
       ));
       
-      allow get: if isMasterAdmin() || (isSignedIn() && (
+      allow get: if hasAdminPrivileges() || (isSignedIn() && (
         getAuthority() >= 1 || 
         resource.data.patientId == request.auth.uid
       ));
       
       allow create: if isSignedIn();
-      allow update, delete: if isMasterAdmin() || (isSignedIn() && (
+      allow update, delete: if hasAdminPrivileges() || (isSignedIn() && (
         getAuthority() >= 1 || 
         resource.data.patientId == request.auth.uid
       ));
     }
 
-    // Prontuários Médicos: Nível 2 (Auxiliar), Nível 4 (Dentista) ou Master
+    // Prontuários Médicos: Níveis Clínicos (2, 4) ou Administrativos (3)
     match /medical_records/{recordId} {
-      allow read, write: if isMasterAdmin() || (isSignedIn() && (getAuthority() == 2 || getAuthority() == 4 || getAuthority() == 3));
+      allow read, write: if hasAdminPrivileges() || (isSignedIn() && (getAuthority() == 2 || getAuthority() == 4));
     }
 
-    // Serviços: Público leitura, Admin escrita
+    // Serviços: Público para leitura, Admin para escrita
     match /services/{id} { 
       allow read: if true; 
-      allow write: if isMasterAdmin() || (isSignedIn() && getAuthority() >= 3); 
+      allow write: if hasAdminPrivileges(); 
     }
   }
 }
