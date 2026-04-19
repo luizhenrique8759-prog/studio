@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from 'react';
@@ -9,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { SERVICES, PROFESSIONALS, TIME_SLOTS, Service, Professional } from "@/lib/mock-data";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Check, ChevronLeft, Clock, User, Stethoscope, Calendar as CalendarIcon, ArrowRight } from "lucide-react";
+import { Check, Clock, User, Stethoscope, Calendar as CalendarIcon, ArrowRight, ArrowLeft } from "lucide-react";
 import Link from 'next/link';
 
 export default function BookingPage() {
@@ -17,9 +16,9 @@ export default function BookingPage() {
   const [step, setStep] = useState(1);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedProfessional, setSelectedProfessional] = useState<Professional | null>(null);
+  const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [isDateConfirmed, setIsDateConfirmed] = useState(false);
-  const [selectedTime, setSelectedTime] = useState<string | null>(null);
 
   const handleNext = () => setStep(s => s + 1);
   const handleBack = () => setStep(s => s - 1);
@@ -27,12 +26,8 @@ export default function BookingPage() {
   const handleDateConfirm = () => {
     if (selectedDate) {
       setIsDateConfirmed(true);
+      handleNext();
     }
-  };
-
-  const handleResetDate = () => {
-    setIsDateConfirmed(false);
-    setSelectedTime(null);
   };
 
   return (
@@ -48,8 +43,9 @@ export default function BookingPage() {
           <div className="hidden md:flex gap-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
             <span className={step >= 1 ? "text-primary border-b-2 border-primary" : ""}>Serviço</span>
             <span className={step >= 2 ? "text-primary border-b-2 border-primary" : ""}>Profissional</span>
-            <span className={step >= 3 ? "text-primary border-b-2 border-primary" : ""}>Data & Hora</span>
-            <span className={step >= 4 ? "text-primary border-b-2 border-primary" : ""}>Confirmação</span>
+            <span className={step >= 3 ? "text-primary border-b-2 border-primary" : ""}>Horário</span>
+            <span className={step >= 4 ? "text-primary border-b-2 border-primary" : ""}>Data</span>
+            <span className={step >= 5 ? "text-primary border-b-2 border-primary" : ""}>Revisão</span>
           </div>
         </header>
 
@@ -118,97 +114,75 @@ export default function BookingPage() {
         )}
 
         {step === 3 && (
-          <div className="grid gap-6 animate-in fade-in zoom-in-95 duration-500">
-            <div className="space-y-2 text-center md:text-left">
-              <h2 className="text-3xl font-headline font-bold">Agende sua visita</h2>
-              <p className="text-muted-foreground">Escolha o melhor dia e horário para o seu atendimento.</p>
+          <div className="grid gap-6 animate-in fade-in slide-in-from-right-4 duration-500">
+            <div className="space-y-2">
+              <h2 className="text-3xl font-headline font-bold">Escolha o horário</h2>
+              <p className="text-muted-foreground">Qual o melhor período do dia para você?</p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-              <Card className="p-2 flex flex-col items-center border-none bg-muted/30">
-                <CardHeader className="w-full text-center pb-2">
-                  <CardTitle className="text-base flex items-center justify-center gap-2 font-headline">
-                    <CalendarIcon className="w-4 h-4 text-primary" />
-                    Selecione o Dia
-                  </CardTitle>
-                </CardHeader>
-                <div className="bg-white rounded-xl shadow-sm border p-2">
-                  <Calendar
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={(date) => {
-                      setSelectedDate(date);
-                      setIsDateConfirmed(false);
-                    }}
-                    className="rounded-md"
-                    locale={ptBR}
-                  />
-                </div>
-                {!isDateConfirmed && selectedDate && (
+            <Card className="border-none shadow-xl bg-card">
+              <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-6">
+                {TIME_SLOTS.map(t => (
                   <Button 
-                    onClick={handleDateConfirm} 
-                    className="mt-6 w-full max-w-[280px] rounded-full bg-primary hover:bg-primary/90 shadow-lg animate-bounce"
+                    key={t} 
+                    variant={selectedTime === t ? "default" : "outline"} 
+                    className={`h-14 rounded-xl text-lg transition-all ${selectedTime === t ? 'scale-105 shadow-md' : 'hover:border-primary'}`}
+                    onClick={() => setSelectedTime(t)}
                   >
-                    Confirmar este dia
+                    {t}
                   </Button>
-                )}
-              </Card>
-
-              <div className="space-y-4">
-                {isDateConfirmed && selectedDate ? (
-                  <Card className="animate-in fade-in slide-in-from-right-4 duration-300 border-primary/20 shadow-xl">
-                    <CardHeader className="bg-primary/5 border-b">
-                      <CardTitle className="text-lg">Horários Disponíveis</CardTitle>
-                      <CardDescription className="flex items-center justify-between">
-                        <span>{format(selectedDate, "eeee, dd 'de' MMMM", { locale: ptBR })}</span>
-                        <Button variant="ghost" size="sm" onClick={handleResetDate} className="text-xs h-auto p-0 text-primary underline">Alterar data</Button>
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid grid-cols-3 gap-2 pt-6">
-                      {TIME_SLOTS.map(t => (
-                        <Button 
-                          key={t} 
-                          variant={selectedTime === t ? "default" : "outline"} 
-                          size="sm"
-                          className={`rounded-lg transition-all ${selectedTime === t ? 'scale-105 shadow-md' : 'hover:border-primary'}`}
-                          onClick={() => setSelectedTime(t)}
-                        >
-                          {t}
-                        </Button>
-                      ))}
-                    </CardContent>
-                    <CardFooter className="bg-muted/30 py-3">
-                       <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Clock className="w-3 h-3" /> Sujeito a disponibilidade
-                       </p>
-                    </CardFooter>
-                  </Card>
-                ) : (
-                  <div className="h-full flex items-center justify-center p-12 border-2 border-dashed rounded-3xl opacity-50">
-                    <div className="text-center space-y-2">
-                      <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                        <Clock className="w-6 h-6 text-muted-foreground" />
-                      </div>
-                      <p className="text-sm font-medium">Confirme uma data para ver os horários</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="flex justify-between pt-8">
+                ))}
+              </CardContent>
+            </Card>
+            <div className="flex justify-between pt-4">
               <Button variant="outline" onClick={handleBack} className="rounded-full px-8">Voltar</Button>
-              <Button disabled={!isDateConfirmed || !selectedTime} onClick={handleNext} className="rounded-full px-10 h-12 text-lg shadow-lg">
-                Revisar Agendamento <ArrowRight className="ml-2 h-5 w-5" />
+              <Button disabled={!selectedTime} onClick={handleNext} className="rounded-full px-10 h-12 text-lg shadow-lg">
+                Ver dias disponíveis <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </div>
           </div>
         )}
 
         {step === 4 && (
+          <div className="grid gap-6 animate-in fade-in zoom-in-95 duration-500">
+            <div className="space-y-2 text-center">
+              <h2 className="text-3xl font-headline font-bold">Selecione o dia</h2>
+              <p className="text-muted-foreground">Mostrando dias disponíveis para o horário das <span className="font-bold text-primary">{selectedTime}</span></p>
+            </div>
+            <div className="max-w-md mx-auto w-full">
+              <Card className="p-4 flex flex-col items-center border-none bg-muted/30 shadow-2xl rounded-3xl">
+                <div className="bg-white rounded-2xl shadow-sm border p-2 w-full">
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={(date) => {
+                      setSelectedDate(date);
+                    }}
+                    className="rounded-md w-full"
+                    locale={ptBR}
+                  />
+                </div>
+                {selectedDate && (
+                  <Button 
+                    onClick={handleDateConfirm} 
+                    className="mt-6 w-full rounded-full bg-primary hover:bg-primary/90 shadow-lg h-12 text-lg font-bold"
+                  >
+                    Confirmar {format(selectedDate, "dd/MM", { locale: ptBR })}
+                  </Button>
+                )}
+              </Card>
+            </div>
+            <div className="flex justify-start pt-4">
+              <Button variant="outline" onClick={handleBack} className="rounded-full px-8">Voltar</Button>
+            </div>
+          </div>
+        )}
+
+        {step === 5 && (
           <div className="max-w-md mx-auto animate-in zoom-in duration-500">
             <Card className="border-2 border-primary shadow-2xl overflow-hidden rounded-[2rem]">
               <CardHeader className="text-center bg-primary text-primary-foreground py-8">
                 <CardTitle className="text-2xl font-headline uppercase tracking-widest">Resumo</CardTitle>
-                <CardDescription className="text-primary-foreground/80">Quase lá! Confira os detalhes.</CardDescription>
+                <CardDescription className="text-primary-foreground/80">Confira se está tudo correto.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6 pt-8 px-8">
                 <div className="flex items-center gap-4 group">
@@ -241,7 +215,7 @@ export default function BookingPage() {
               </CardContent>
               <CardFooter className="flex flex-col gap-3 p-8">
                 <Button onClick={handleNext} className="w-full h-14 rounded-full text-xl font-bold shadow-xl bg-accent hover:bg-accent/90 text-white transition-all hover:translate-y-[-2px]">
-                  Confirmar Agendamento
+                  Finalizar Agendamento
                 </Button>
                 <Button variant="ghost" onClick={handleBack} className="w-full text-muted-foreground hover:bg-transparent hover:text-primary">
                   Deseja alterar algo?
@@ -251,7 +225,7 @@ export default function BookingPage() {
           </div>
         )}
 
-        {step === 5 && (
+        {step === 6 && (
           <div className="text-center space-y-6 py-12 animate-in fade-in zoom-in duration-700">
             <div className="mx-auto w-32 h-32 bg-accent text-white rounded-full flex items-center justify-center shadow-2xl relative">
               <Check className="w-16 h-16 stroke-[4px]" />
@@ -259,12 +233,12 @@ export default function BookingPage() {
             </div>
             <div className="space-y-2">
               <h2 className="text-5xl font-headline font-bold text-primary">Agendado!</h2>
-              <p className="text-xl text-muted-foreground">Tudo certo, seu horário está reservado.</p>
-              <p className="text-sm text-muted-foreground bg-muted/50 inline-block px-4 py-1 rounded-full">Enviamos um lembrete para seu e-mail.</p>
+              <p className="text-xl text-muted-foreground">Seu horário foi reservado com sucesso.</p>
+              <p className="text-sm text-muted-foreground bg-muted/50 inline-block px-4 py-1 rounded-full">Enviamos os detalhes para seu e-mail.</p>
             </div>
             <div className="flex flex-col sm:flex-row justify-center gap-4 pt-8">
               <Button asChild variant="outline" className="rounded-full px-10 h-12 text-lg">
-                <Link href="/">Início</Link>
+                <Link href="/">Voltar ao Início</Link>
               </Button>
               <Button asChild className="rounded-full px-10 h-12 text-lg shadow-lg">
                 <Link href="/dashboard">Ver meus horários</Link>
