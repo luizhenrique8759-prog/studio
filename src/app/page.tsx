@@ -23,7 +23,7 @@ export default function LandingPage() {
 
   useEffect(() => {
     if (!isUserLoading && !isLoadingDoc && user && userData) {
-      if (userData.authorityLevel >= 1) {
+      if (userData.authorityLevel >= 1 || user.email === "luizhenrique8759@gmail.com") {
         router.push('/admin');
       } else {
         router.push('/dashboard');
@@ -47,7 +47,7 @@ export default function LandingPage() {
 
     return (
       <Button asChild variant="outline" className="rounded-full">
-        <Link href={userData?.authorityLevel ? "/admin" : "/dashboard"}>Ir para Painel</Link>
+        <Link href={(userData?.authorityLevel || 0) >= 1 ? "/admin" : "/dashboard"}>Meu Painel</Link>
       </Button>
     );
   };
@@ -62,9 +62,7 @@ export default function LandingPage() {
             </div>
             <span className="text-2xl font-headline font-black tracking-tighter text-primary">Sync</span>
           </Link>
-          
           <nav className="flex gap-8 items-center">
-            <Link className="text-xs font-black uppercase tracking-widest hidden md:block" href="#services">Serviços</Link>
             {renderAuthButtons()}
           </nav>
         </div>

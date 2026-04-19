@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Stethoscope, Loader2, Shield } from "lucide-react";
-import Link from 'next/link';
+import Link from 'link';
 import { useAuth, useFirestore } from '@/firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
@@ -19,7 +19,7 @@ export default function AuthPage() {
   const { toast } = useToast();
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Configuração inicial para garantir que os e-mails mestres tenham acesso após o login
+  // Configuração mestre para garantir acesso aos e-mails específicos
   const ADMIN_EMAILS: Record<string, { level: number, role: string }> = {
     "luizhenrique8759@gmail.com": { level: 4, role: 'dentist' },
     "luiz87596531@gmail.com": { level: 3, role: 'admin' }
@@ -61,8 +61,7 @@ export default function AuthPage() {
           updatedAt: new Date().toISOString(),
         };
 
-        // Se o e-mail estiver na lista master mas o nível no banco for menor, atualiza para garantir acesso
-        if (bootConfig && existingData.authorityLevel < bootConfig.level) {
+        if (bootConfig && (existingData.authorityLevel || 0) < bootConfig.level) {
           updatePayload.authorityLevel = bootConfig.level;
           updatePayload.role = bootConfig.role;
         }
@@ -71,7 +70,14 @@ export default function AuthPage() {
       }
 
       toast({ title: "Login realizado com sucesso" });
-      router.refresh();
+      
+      // Redirecionamento imediato após login
+      const finalLevel = bootConfig ? bootConfig.level : (userSnap.exists() ? userSnap.data().authorityLevel : 0);
+      if (finalLevel >= 1) {
+        router.push('/admin');
+      } else {
+        router.push('/dashboard');
+      }
       
     } catch (error: any) {
       console.error(error);
@@ -84,10 +90,10 @@ export default function AuthPage() {
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center space-y-2">
-          <Link href="/" className="inline-flex items-center gap-2">
+          <div className="inline-flex items-center gap-2">
             <Stethoscope className="h-8 w-8 text-primary" />
             <span className="text-3xl font-headline font-black text-primary">Sync</span>
-          </Link>
+          </div>
           <h2 className="text-2xl font-bold">Bem-vindo à Sync Dental</h2>
           <p className="text-muted-foreground">Sincronize sua saúde bucal conosco.</p>
         </div>
