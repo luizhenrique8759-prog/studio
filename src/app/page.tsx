@@ -98,11 +98,7 @@ export default function LandingPage() {
           </nav>
 
           <div className="md:hidden">
-             <Button variant="ghost" size="icon" asChild>
-                <Link href={user ? (isAdmin || isProfessional ? "/admin" : "/dashboard") : "/auth"}>
-                  <Users className="h-6 w-6" />
-                </Link>
-             </Button>
+             {renderAuthButton()}
           </div>
         </div>
       </header>
