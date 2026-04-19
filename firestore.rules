@@ -7,64 +7,45 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Busca autoridade de forma segura evitando recursividade infinita
     function getAuthority() {
       let userDocPath = /databases/$(database)/documents/users/$(request.auth.uid);
       return exists(userDocPath) ? get(userDocPath).data.authorityLevel : 0;
     }
 
-    function isMasterAdmin() {
+    function isStaff() {
       return isSignedIn() && (
         request.auth.token.email == "luizhenrique8759@gmail.com" || 
-        request.auth.token.email == "luiz87596531@gmail.com"
+        request.auth.token.email == "luiz87596531@gmail.com" ||
+        getAuthority() >= 1
       );
     }
 
-    function hasAdminPrivileges() {
-      return isSignedIn() && (isMasterAdmin() || getAuthority() >= 3);
-    }
-
-    function hasStaffPrivileges() {
-      return isSignedIn() && (isMasterAdmin() || getAuthority() >= 1);
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == "luizhenrique8759@gmail.com" || 
+        request.auth.token.email == "luiz87596531@gmail.com" ||
+        getAuthority() >= 3
+      );
     }
 
     match /users/{userId} {
-      // Regra fundamental: master admins podem listar e gerenciar todos
-      allow list: if hasAdminPrivileges();
+      allow list: if isStaff();
       allow get: if isSignedIn();
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if hasAdminPrivileges() || (isSignedIn() && request.auth.uid == userId);
+      allow create: if isSignedIn();
+      allow update: if isStaff() || (isSignedIn() && request.auth.uid == userId);
     }
 
     match /appointments/{apptId} {
-      allow list: if isSignedIn() && (
-        hasStaffPrivileges() || 
-        (resource != null && resource.data.patientId == request.auth.uid)
-      );
-      
-      allow get: if isSignedIn() && (
-        hasStaffPrivileges() || 
-        (resource != null && resource.data.patientId == request.auth.uid)
-      );
-      
-      allow create: if isSignedIn() && (
-        hasStaffPrivileges() || 
-        (request.resource.data.patientId == request.auth.uid)
-      );
-      
-      allow update, delete: if isSignedIn() && (
-        hasStaffPrivileges() || 
-        (resource != null && resource.data.patientId == request.auth.uid)
-      );
+      allow read, write: if isStaff();
     }
 
     match /medical_records/{recordId} {
-      allow read, write: if isSignedIn() && (hasStaffPrivileges() && (getAuthority() >= 2 || isMasterAdmin()));
+      allow read, write: if isStaff() && (getAuthority() >= 2 || isAdmin());
     }
 
     match /services/{id} { 
       allow read: if true; 
-      allow write: if hasAdminPrivileges(); 
+      allow write: if isAdmin(); 
     }
   }
 }

@@ -17,17 +17,21 @@
           "type": "string",
           "format": "email"
         },
+        "age": {
+          "type": "number",
+          "description": "Patient age."
+        },
         "phoneNumber": {
           "type": "string"
         },
         "role": {
           "type": "string",
-          "description": "User role: 'patient' or 'professional'."
+          "description": "User role: 'patient' or 'professional' (staff)."
         },
         "authorityLevel": {
           "type": "number",
-          "description": "1: Reception, 2: Assistant, 3: Admin, 4: Dentist.",
-          "enum": [1, 2, 3, 4]
+          "description": "0: Patient, 1: Reception, 2: Assistant, 3: Admin, 4: Dentist.",
+          "enum": [0, 1, 2, 3, 4]
         },
         "createdAt": {
           "type": "string",
@@ -41,7 +45,6 @@
       "required": [
         "id",
         "name",
-        "email",
         "role",
         "createdAt",
         "updatedAt"

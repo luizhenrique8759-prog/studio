@@ -2,22 +2,25 @@
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SERVICES } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, ShieldAlert, CheckCircle2, Users, TrendingUp, DollarSign, CalendarPlus, Bell, AlertTriangle, Trash2 } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, ShieldAlert, CheckCircle2, Users, TrendingUp, DollarSign, CalendarPlus, Bell, AlertTriangle, Trash2, UserPlus, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { collection, doc, updateDoc, query, orderBy } from 'firebase/firestore';
+import { collection, doc, updateDoc, query, orderBy, addDoc, where } from 'firebase/firestore';
 import Link from 'next/link';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export default function AdminDashboard() {
   const { toast } = useToast();
@@ -27,6 +30,8 @@ export default function AdminDashboard() {
   const router = useRouter();
 
   const [systemErrors, setSystemErrors] = useState<any[]>([]);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [patientSearch, setPatientSearch] = useState("");
 
   useEffect(() => {
     const handleError = (error: any) => {
@@ -54,15 +59,28 @@ export default function AdminDashboard() {
 
   const isAuthorized = useMemo(() => {
     if (isUserLoading || isLoadingUserData) return false;
-    return authorityLevel >= 1;
-  }, [isUserLoading, isLoadingUserData, authorityLevel]);
+    const email = user?.email || "";
+    return authorityLevel >= 1 || email === "luizhenrique8759@gmail.com" || email === "luiz87596531@gmail.com";
+  }, [isUserLoading, isLoadingUserData, authorityLevel, user]);
 
   const usersRef = useMemoFirebase(() => {
-    if (!db || !isAuthorized || authorityLevel < 3) return null;
+    if (!db || !isAuthorized) return null;
     return query(collection(db, 'users'), orderBy('name', 'asc'));
-  }, [db, isAuthorized, authorityLevel]);
+  }, [db, isAuthorized]);
   
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
+
+  const patients = useMemo(() => {
+    if (!allUsers) return [];
+    return allUsers.filter(u => u.role === 'patient');
+  }, [allUsers]);
+
+  const filteredPatients = useMemo(() => {
+    return patients.filter(p => 
+      p.name?.toLowerCase().includes(patientSearch.toLowerCase()) || 
+      p.email?.toLowerCase().includes(patientSearch.toLowerCase())
+    );
+  }, [patients, patientSearch]);
 
   const apptsQuery = useMemoFirebase(() => {
     if (!db || !isAuthorized) return null;
@@ -103,6 +121,32 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleRegisterPatient = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!db) return;
+    setIsRegistering(true);
+    const formData = new FormData(e.currentTarget);
+    const name = formData.get('name') as string;
+    const age = parseInt(formData.get('age') as string);
+
+    try {
+      await addDoc(collection(db, 'users'), {
+        name,
+        age,
+        role: 'patient',
+        authorityLevel: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      toast({ title: "Paciente Cadastrado", description: `${name} foi adicionado ao sistema.` });
+      (e.target as HTMLFormElement).reset();
+    } catch (error) {
+      toast({ variant: "destructive", title: "Erro ao cadastrar", description: "Verifique suas permissões." });
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
   const handleConfirmAppointment = async (id: string) => {
     if (!db) return;
     try {
@@ -126,10 +170,9 @@ export default function AdminDashboard() {
       <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center space-y-4">
         <ShieldAlert className="h-16 w-16 text-destructive" />
         <h1 className="text-2xl font-bold">Acesso Restrito</h1>
-        <p className="text-muted-foreground">O seu perfil ainda não possui autorização administrativa.</p>
+        <p className="text-muted-foreground">Área exclusiva para colaboradores Sync Dental.</p>
         <div className="flex gap-2">
-           <Button variant="outline" asChild><Link href="/dashboard">Ir para Painel do Paciente</Link></Button>
-           <Button onClick={handleLogout}>Sair</Button>
+           <Button onClick={handleLogout}>Sair do Sistema</Button>
         </div>
       </div>
     );
@@ -151,6 +194,9 @@ export default function AdminDashboard() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <Button asChild className="rounded-full shadow-lg gap-2">
+            <Link href="/booking"><CalendarPlus className="h-4 w-4" /> Novo Agendamento</Link>
+          </Button>
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" size="icon" className={`rounded-full relative ${systemErrors.length > 0 ? 'border-destructive text-destructive' : ''}`}>
@@ -185,8 +231,9 @@ export default function AdminDashboard() {
       </header>
 
       <Tabs defaultValue="appointments" className="w-full">
-        <TabsList className="bg-muted/50 mb-6 h-auto p-1 rounded-xl">
+        <TabsList className="bg-muted/50 mb-6 h-auto p-1 rounded-xl flex-wrap justify-start">
           <TabsTrigger value="appointments" className="rounded-lg font-bold">Agenda</TabsTrigger>
+          <TabsTrigger value="patients" className="rounded-lg font-bold">Pacientes</TabsTrigger>
           {authorityLevel >= 2 && <TabsTrigger value="records" className="rounded-lg font-bold">Prontuários</TabsTrigger>}
           {authorityLevel >= 3 && <TabsTrigger value="management" className="rounded-lg font-bold">Equipe</TabsTrigger>}
           {authorityLevel >= 3 && <TabsTrigger value="finance" className="rounded-lg font-bold">Financeiro</TabsTrigger>}
@@ -231,6 +278,65 @@ export default function AdminDashboard() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="patients">
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <div className="relative w-full max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  placeholder="Buscar por nome ou e-mail..." 
+                  className="pl-10 h-11 rounded-xl"
+                  value={patientSearch}
+                  onChange={(e) => setPatientSearch(e.target.value)}
+                />
+              </div>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button className="rounded-full gap-2"><UserPlus className="h-4 w-4" /> Novo Paciente</Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[425px] rounded-3xl">
+                  <DialogHeader>
+                    <DialogTitle>Cadastrar Paciente</DialogTitle>
+                    <DialogDescription>Adicione as informações básicas do paciente para o prontuário.</DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleRegisterPatient} className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Nome Completo</Label>
+                      <Input id="name" name="name" required placeholder="Ex: João da Silva" className="rounded-xl h-11" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="age">Idade</Label>
+                      <Input id="age" name="age" type="number" required placeholder="Ex: 25" className="rounded-xl h-11" />
+                    </div>
+                    <Button type="submit" disabled={isRegistering} className="w-full h-12 rounded-xl">
+                      {isRegistering ? <Loader2 className="animate-spin" /> : "Salvar Cadastro"}
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader><TableRow><TableHead className="pl-6">Nome</TableHead><TableHead>Idade</TableHead><TableHead>E-mail</TableHead><TableHead className="text-right pr-6">Data de Cadastro</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {filteredPatients?.map((p) => (
+                      <TableRow key={p.id}>
+                        <TableCell className="font-bold pl-6">{p.name}</TableCell>
+                        <TableCell>{p.age || 'N/A'}</TableCell>
+                        <TableCell className="text-muted-foreground">{p.email || 'Presencial'}</TableCell>
+                        <TableCell className="text-right pr-6 text-xs text-muted-foreground">{p.createdAt ? new Date(p.createdAt).toLocaleDateString('pt-BR') : 'N/A'}</TableCell>
+                      </TableRow>
+                    ))}
+                    {filteredPatients?.length === 0 && <TableRow><TableCell colSpan={4} className="text-center py-10 text-muted-foreground">Nenhum paciente encontrado.</TableCell></TableRow>}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
         <TabsContent value="management">
           <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
             <CardHeader className="bg-muted/5 border-b">
@@ -240,7 +346,7 @@ export default function AdminDashboard() {
               <Table>
                 <TableHeader><TableRow><TableHead className="pl-6">Nome</TableHead><TableHead>E-mail</TableHead><TableHead>Nível</TableHead><TableHead className="text-right pr-6">Ação</TableHead></TableRow></TableHeader>
                 <TableBody>
-                  {allUsers?.map((u) => (
+                  {allUsers?.filter(u => u.role !== 'patient').map((u) => (
                     <TableRow key={u.id}>
                       <TableCell className="font-bold pl-6">{u.name}</TableCell>
                       <TableCell className="text-muted-foreground">{u.email}</TableCell>
@@ -260,7 +366,7 @@ export default function AdminDashboard() {
 
         <TabsContent value="finance">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card className="rounded-3xl bg-primary text-white"><CardHeader><CardTitle>Faturamento</CardTitle></CardHeader><CardContent><p className="text-4xl font-black">R$ {appointments?.reduce((acc, a) => acc + (SERVICES.find(s => s.id === a.serviceId)?.price || 0), 0).toLocaleString('pt-BR')}</p></CardContent></Card>
+            <Card className="rounded-3xl bg-primary text-white"><CardHeader><CardTitle>Faturamento Estimado</CardTitle></CardHeader><CardContent><p className="text-4xl font-black">R$ {appointments?.reduce((acc, a) => acc + (SERVICES.find(s => s.id === a.serviceId)?.price || 0), 0).toLocaleString('pt-BR')}</p></CardContent></Card>
           </div>
         </TabsContent>
       </Tabs>
