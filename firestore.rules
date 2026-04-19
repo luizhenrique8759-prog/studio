@@ -18,17 +18,17 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    function getAuthorityLevel() {
-      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
-      return exists(userPath) ? getUserData().get('authorityLevel', 0) : 0;
-    }
-
     function isProfessional() {
-      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
       return isAdmin() || (isSignedIn() && (
         exists(/databases/$(database)/documents/app_roles/professional/users/$(request.auth.uid)) ||
-        (exists(userPath) && getUserData().get('role', '') == 'professional')
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['professional', 'admin'])
       ));
+    }
+
+    function getAuthorityLevel() {
+      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(userPath) ? get(userPath).data.get('authorityLevel', 0) : 0;
     }
 
     match /users/{userId} {
@@ -48,12 +48,11 @@ service cloud.firestore {
     }
     
     match /appointments/{id} { 
-      // Separação de list e get para maior robustez em consultas globais
-      allow list: if isSignedIn() && (
-        isAdmin() || 
-        (isProfessional() && getAuthorityLevel() >= 1) || 
-        request.auth.uid == resource.data.patientId
-      );
+      // Permitir listagem global para administradores e profissionais autorizados
+      allow list: if isSignedIn() && (isAdmin() || (isProfessional() && getAuthorityLevel() >= 1));
+      
+      // Permitir listagem filtrada para o próprio paciente
+      allow list: if isSignedIn() && request.auth.uid == resource.data.patientId;
       
       allow get: if isSignedIn() && (
         isAdmin() || 

@@ -32,35 +32,42 @@ export default function AdminDashboard() {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
 
+  const isAdmin = user?.email === HARDCODED_ADMIN_EMAIL;
+
   const userDocRef = useMemoFirebase(() => {
     if (!user || !db) return null;
     return doc(db, 'users', user.uid);
   }, [db, user]);
   const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
-  const isAdmin = user?.email === HARDCODED_ADMIN_EMAIL;
-  
-  // Só define como profissional se os dados do usuário estiverem carregados ou se for o admin hardcoded
+  // Define permissões com base no e-mail ou dados do Firestore
   const isProfessional = useMemo(() => {
     if (isAdmin) return true;
     if (isLoadingUserData) return false;
-    return userData?.role === 'professional';
+    return userData?.role === 'professional' || userData?.role === 'admin';
   }, [isAdmin, isLoadingUserData, userData]);
 
-  const authorityLevel = userData?.authorityLevel || (isAdmin ? 4 : 0);
+  const authorityLevel = useMemo(() => {
+    if (isAdmin) return 4;
+    return userData?.authorityLevel || 0;
+  }, [isAdmin, userData]);
 
-  // Apenas busca usuários se for profissional autorizado e o carregamento inicial terminou
+  // Apenas busca usuários se for profissional autorizado
   const usersRef = useMemoFirebase(() => {
-    if (!db || isUserLoading || isLoadingUserData || !isProfessional) return null;
+    if (!db || isUserLoading || !isProfessional) return null;
+    // O admin mestre pode carregar imediatamente
+    if (!isAdmin && isLoadingUserData) return null;
     return collection(db, 'users');
-  }, [db, isUserLoading, isLoadingUserData, isProfessional]);
+  }, [db, isUserLoading, isProfessional, isAdmin, isLoadingUserData]);
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
 
-  // Apenas busca agendamentos se for profissional autorizado e o carregamento inicial terminou
+  // Apenas busca agendamentos se for profissional autorizado
   const apptsQuery = useMemoFirebase(() => {
-    if (!db || isUserLoading || isLoadingUserData || !isProfessional) return null;
+    if (!db || isUserLoading || !isProfessional) return null;
+    // O admin mestre pode carregar imediatamente
+    if (!isAdmin && isLoadingUserData) return null;
     return query(collection(db, 'appointments'), orderBy('date', 'asc'), orderBy('time', 'asc'));
-  }, [db, isUserLoading, isLoadingUserData, isProfessional]);
+  }, [db, isUserLoading, isProfessional, isAdmin, isLoadingUserData]);
   const { data: appointments, isLoading: isLoadingAppts } = useCollection(apptsQuery);
 
   const [loading, setLoading] = useState<string | null>(null);
@@ -100,7 +107,7 @@ export default function AdminDashboard() {
   const handleToggleProfessional = async (targetUser: any, level: string) => {
     if (!db || !isAdmin) return;
     const newLevel = parseInt(level);
-    const newRole = newLevel === 0 ? 'patient' : 'professional';
+    const newRole = newLevel === 0 ? 'patient' : (newLevel === 3 ? 'admin' : 'professional');
     
     try {
       const userRef = doc(db, 'users', targetUser.id);
@@ -109,13 +116,20 @@ export default function AdminDashboard() {
         authorityLevel: newLevel
       });
 
-      const roleRef = doc(db, 'app_roles', (newRole === 'professional' ? 'professional' : 'admin'), 'users', targetUser.id);
-      if (newLevel > 0) {
-        await setDoc(roleRef, { active: true, assignedAt: new Date().toISOString() });
+      // Sincroniza app_roles para segurança robusta
+      const profRoleRef = doc(db, 'app_roles', 'professional', 'users', targetUser.id);
+      const adminRoleRef = doc(db, 'app_roles', 'admin', 'users', targetUser.id);
+
+      if (newLevel >= 1) {
+        await setDoc(profRoleRef, { active: true, assignedAt: new Date().toISOString() });
       } else {
-        // Se voltar a ser paciente, removemos de papéis especiais
-        await deleteDoc(doc(db, 'app_roles', 'professional', 'users', targetUser.id));
-        await deleteDoc(doc(db, 'app_roles', 'admin', 'users', targetUser.id));
+        await deleteDoc(profRoleRef);
+      }
+
+      if (newLevel >= 3) {
+        await setDoc(adminRoleRef, { active: true, assignedAt: new Date().toISOString() });
+      } else {
+        await deleteDoc(adminRoleRef);
       }
 
       toast({ title: "Autoridade Atualizada", description: `${targetUser.name} agora é Nível ${newLevel}.` });
@@ -168,7 +182,7 @@ export default function AdminDashboard() {
     }
   };
 
-  if (isUserLoading || (user && isLoadingUserData)) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (isUserLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!user) return null;
 
   if (!isProfessional && !isAdmin) {
@@ -286,13 +300,13 @@ export default function AdminDashboard() {
                             <p className="font-bold">{u.name}</p>
                             <p className="text-xs text-muted-foreground">{u.email}</p>
                             <div className="flex items-center gap-2 mt-1">
-                              <Badge variant={u.role === 'professional' ? 'default' : 'outline'} className="text-[8px] h-4">
-                                {u.role === 'professional' ? `LVL ${u.authorityLevel}` : 'PACIENTE'}
+                              <Badge variant={u.role === 'professional' || u.role === 'admin' ? 'default' : 'outline'} className="text-[8px] h-4">
+                                {u.role === 'professional' || u.role === 'admin' ? `LVL ${u.authorityLevel}` : 'PACIENTE'}
                               </Badge>
                             </div>
                           </div>
                         </div>
-                        {canEditRoles && (
+                        {canEditRoles && u.email !== HARDCODED_ADMIN_EMAIL && (
                           <Select defaultValue={u.authorityLevel?.toString() || "0"} onValueChange={(val) => handleToggleProfessional(u, val)}>
                             <SelectTrigger className="w-[140px] rounded-full text-xs">
                               <SelectValue placeholder="Nível" />
