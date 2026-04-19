@@ -3,7 +3,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ADMIN MASTER: Acesso total e imediato baseado no e-mail hardcoded
+    // Função Master Admin: Prioridade máxima baseada no e-mail tokenizado
     function isMasterAdmin() {
       return request.auth != null && request.auth.token.email == "luizhenrique8759@gmail.com";
     }
@@ -19,14 +19,18 @@ service cloud.firestore {
 
     function isProfessional() {
       let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
-      return isSignedIn() && exists(userPath) && get(userPath).data.get('role', 'patient') in ['professional', 'admin'];
+      return isSignedIn() && (
+        isMasterAdmin() || 
+        (exists(userPath) && get(userPath).data.get('role', 'patient') in ['professional', 'admin'])
+      );
     }
 
-    // Regra global para o Master Admin (Prioridade Máxima)
+    // Regra Global de Segurança para o Administrador Master
     match /{document=**} {
       allow read, write: if isMasterAdmin();
     }
 
+    // Coleção de Usuários
     match /users/{userId} {
       allow get: if isSignedIn();
       allow list: if isMasterAdmin() || (isProfessional() && getAuthorityLevel() >= 3);
@@ -34,30 +38,33 @@ service cloud.firestore {
       allow update: if isMasterAdmin() || (isSignedIn() && request.auth.uid == userId);
     }
 
+    // Prontuários Médicos: Nível 2+
     match /medical_records/{recordId} {
       allow read, write: if isMasterAdmin() || (isProfessional() && getAuthorityLevel() >= 2);
     }
 
-    match /app_roles/{role}/users/{userId} {
-      allow read: if isSignedIn();
-      allow write: if isMasterAdmin(); 
-    }
-    
+    // Agendamentos: Sincronização e Filtros
     match /appointments/{id} { 
-      // Permissões de Listagem: Admin e Profissionais Lvl 1+
+      // Permissões Administrativas (Listagem irrestrita)
       allow list: if isMasterAdmin() || (isProfessional() && getAuthorityLevel() >= 1);
       
-      // Pacientes vêem apenas seus próprios (necessita filtro .where('patientId', '==', uid) no cliente)
+      // Permissões de Paciente (Necessita filtro no cliente para listagem)
       allow list: if isSignedIn() && resource.data.patientId == request.auth.uid;
       
       allow get: if isSignedIn() && (
         isMasterAdmin() || 
         (isProfessional() && getAuthorityLevel() >= 1) || 
-        request.auth.uid == resource.data.patientId
+        resource.data.patientId == request.auth.uid
       );
       
       allow create: if isSignedIn();
       allow update, delete: if isMasterAdmin() || (isProfessional() && getAuthorityLevel() >= 1);
+    }
+
+    // Coleções Auxiliares
+    match /app_roles/{role}/users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isMasterAdmin(); 
     }
     
     match /services/{id} { allow read: if true; allow write: if isMasterAdmin(); }

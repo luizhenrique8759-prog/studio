@@ -52,8 +52,9 @@ export default function AdminDashboard() {
     return userData?.authorityLevel || 0;
   }, [isMasterAdmin, userData]);
 
-  // Consultas estabilizadas: só rodam quando o perfil está confirmado
-  const shouldFetchData = !isUserLoading && !isLoadingUserData && isProfessional;
+  // Bloqueio de consultas até que a autoridade esteja confirmada
+  const canPerformQueries = !isUserLoading && (isMasterAdmin || !isLoadingUserData);
+  const shouldFetchData = canPerformQueries && isProfessional;
 
   const usersRef = useMemoFirebase(() => {
     if (!db || !shouldFetchData) return null;
@@ -114,7 +115,6 @@ export default function AdminDashboard() {
         updatedAt: new Date().toISOString()
       });
 
-      // Sincronizar papéis na coleção de segurança
       const profRoleRef = doc(db, 'app_roles', 'professional', 'users', targetUser.id);
       const adminRoleRef = doc(db, 'app_roles', 'admin', 'users', targetUser.id);
 
