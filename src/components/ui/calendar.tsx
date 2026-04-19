@@ -20,7 +20,7 @@ function Calendar({
     <DayPicker
       showOutsideDays={showOutsideDays}
       className={cn("p-3", className)}
-      disabled={{ dayOfWeek: [0] }}
+      disabled={{ dayOfWeek: [0] }} // Desabilita domingos
       classNames={{
         months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
         month: "space-y-4",
@@ -34,12 +34,12 @@ function Calendar({
         nav_button_previous: "absolute left-1",
         nav_button_next: "absolute right-1",
         table: "w-full border-collapse space-y-1",
-        head_row: "flex",
+        head_row: "flex justify-center",
         head_cell:
-          "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem] text-center [&:nth-child(1)]:hidden",
-        row: "flex w-full mt-2",
+          "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem] text-center [&:nth-child(1)]:hidden", // Esconde cabeçalho do domingo
+        row: "flex w-full mt-2 justify-center",
         cell: cn(
-          "h-9 w-9 text-center text-sm p-0 relative focus-within:relative focus-within:z-20 [&:nth-child(1)]:hidden",
+          "h-9 w-9 text-center text-sm p-0 relative focus-within:relative focus-within:z-20 [&:nth-child(1)]:hidden", // Esconde célula do domingo
           props.mode === "range"
             ? "[&:has(>.day-range-end)]:rounded-r-md [&:has(>.day-range-start)]:rounded-l-md first:[&:has(>text-foreground)]:rounded-l-md last:[&:has(>text-foreground)]:rounded-r-md"
             : "[&:has([aria-selected])]:rounded-md"
