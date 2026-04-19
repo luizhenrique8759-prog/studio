@@ -1,3 +1,22 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "hero-bg",
+      "description": "Modern dental office interior",
+      "imageUrl": "https://picsum.photos/seed/dental1/1200/600",
+      "imageHint": "dental office"
+    },
+    {
+      "id": "dentist-female",
+      "description": "Professional female dentist smiling",
+      "imageUrl": "https://picsum.photos/seed/dentist2/400/400",
+      "imageHint": "female dentist"
+    },
+    {
+      "id": "dentist-male",
+      "description": "Professional male dentist",
+      "imageUrl": "https://picsum.photos/seed/dentist3/400/400",
+      "imageHint": "male dentist"
+    }
+  ]
 }
