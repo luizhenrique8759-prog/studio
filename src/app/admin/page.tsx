@@ -38,9 +38,9 @@ export default function AdminDashboard() {
     if (!user || !db) return null;
     return doc(db, 'users', user.uid);
   }, [db, user]);
+  
   const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
-  // Define permissões com base no e-mail ou dados do Firestore
   const isProfessional = useMemo(() => {
     if (isAdmin) return true;
     if (isLoadingUserData) return false;
@@ -52,22 +52,19 @@ export default function AdminDashboard() {
     return userData?.authorityLevel || 0;
   }, [isAdmin, userData]);
 
-  // Apenas busca usuários se for profissional autorizado
+  // Sincronização: Aguarda o carregamento do perfil para evitar erro de permissão
   const usersRef = useMemoFirebase(() => {
-    if (!db || isUserLoading || !isProfessional) return null;
-    // O admin mestre pode carregar imediatamente
-    if (!isAdmin && isLoadingUserData) return null;
-    return collection(db, 'users');
-  }, [db, isUserLoading, isProfessional, isAdmin, isLoadingUserData]);
+    if (!db || isUserLoading || isLoadingUserData || !isProfessional) return null;
+    return query(collection(db, 'users'), orderBy('name', 'asc'));
+  }, [db, isUserLoading, isLoadingUserData, isProfessional]);
+  
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
 
-  // Apenas busca agendamentos se for profissional autorizado
   const apptsQuery = useMemoFirebase(() => {
-    if (!db || isUserLoading || !isProfessional) return null;
-    // O admin mestre pode carregar imediatamente
-    if (!isAdmin && isLoadingUserData) return null;
-    return query(collection(db, 'appointments'), orderBy('date', 'asc'), orderBy('time', 'asc'));
-  }, [db, isUserLoading, isProfessional, isAdmin, isLoadingUserData]);
+    if (!db || isUserLoading || isLoadingUserData || !isProfessional) return null;
+    return query(collection(db, 'appointments'), orderBy('date', 'asc'));
+  }, [db, isUserLoading, isLoadingUserData, isProfessional]);
+  
   const { data: appointments, isLoading: isLoadingAppts } = useCollection(apptsQuery);
 
   const [loading, setLoading] = useState<string | null>(null);
@@ -86,7 +83,6 @@ export default function AdminDashboard() {
     }
   }, [user, isUserLoading, router]);
 
-  // Hierarquia de Permissões
   const canViewRecords = isAdmin || authorityLevel >= 2;
   const canUseIA = isAdmin || authorityLevel >= 4; 
   const canViewManagement = isAdmin || authorityLevel >= 3;
@@ -116,7 +112,6 @@ export default function AdminDashboard() {
         authorityLevel: newLevel
       });
 
-      // Sincroniza app_roles para segurança robusta
       const profRoleRef = doc(db, 'app_roles', 'professional', 'users', targetUser.id);
       const adminRoleRef = doc(db, 'app_roles', 'admin', 'users', targetUser.id);
 
@@ -182,7 +177,7 @@ export default function AdminDashboard() {
     }
   };
 
-  if (isUserLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (isUserLoading || isLoadingUserData) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!user) return null;
 
   if (!isProfessional && !isAdmin) {

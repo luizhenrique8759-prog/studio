@@ -7,6 +7,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Função de administrador simplificada para máxima performance e confiabilidade
     function isAdmin() {
       return isSignedIn() && (
         request.auth.token.email == "luizhenrique8759@gmail.com" ||
@@ -14,16 +15,9 @@ service cloud.firestore {
       );
     }
 
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-
     function isProfessional() {
-      return isAdmin() || (isSignedIn() && (
-        exists(/databases/$(database)/documents/app_roles/professional/users/$(request.auth.uid)) ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['professional', 'admin'])
-      ));
+      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
+      return isAdmin() || (isSignedIn() && exists(userPath) && get(userPath).data.role in ['professional', 'admin']);
     }
 
     function getAuthorityLevel() {
@@ -34,8 +28,8 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isSignedIn();
       allow list: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 1);
-      allow create, update: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isAdmin();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
     }
 
     match /medical_records/{recordId} {
@@ -48,10 +42,10 @@ service cloud.firestore {
     }
     
     match /appointments/{id} { 
-      // Permitir listagem global para administradores e profissionais autorizados
-      allow list: if isSignedIn() && (isAdmin() || (isProfessional() && getAuthorityLevel() >= 1));
+      // Permissões de Listagem: Admin e Profissionais autorizados podem ver tudo
+      allow list: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 1);
       
-      // Permitir listagem filtrada para o próprio paciente
+      // Pacientes vêem apenas seus próprios documentos (requer filtro .where('patientId', '==', uid))
       allow list: if isSignedIn() && request.auth.uid == resource.data.patientId;
       
       allow get: if isSignedIn() && (
@@ -61,7 +55,7 @@ service cloud.firestore {
       );
       
       allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && (isAdmin() || (isProfessional() && getAuthorityLevel() >= 1));
+      allow update, delete: if isAdmin() || (isProfessional() && getAuthorityLevel() >= 1);
     }
     
     match /services/{id} { allow read: if true; allow write: if isAdmin(); }
