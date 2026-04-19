@@ -12,6 +12,7 @@ service cloud.firestore {
       return exists(userDocPath) ? get(userDocPath).data.authorityLevel : 0;
     }
 
+    // Equipe: E-mails mestres ou qualquer um com nível 1 ou superior
     function isStaff() {
       return isSignedIn() && (
         request.auth.token.email == "luizhenrique8759@gmail.com" || 
@@ -20,6 +21,7 @@ service cloud.firestore {
       );
     }
 
+    // Administrador: E-mails mestres ou nível 3 ou superior
     function isAdmin() {
       return isSignedIn() && (
         request.auth.token.email == "luizhenrique8759@gmail.com" || 
@@ -28,23 +30,26 @@ service cloud.firestore {
       );
     }
 
+    // Coleção de usuários: apenas equipe pode listar. Usuário pode ler o próprio.
     match /users/{userId} {
       allow list: if isStaff();
       allow get: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isStaff() || (isSignedIn() && request.auth.uid == userId);
+      allow create: if isSignedIn(); // Permite criar o próprio perfil no primeiro login
+      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId && getAuthority() == 0);
     }
 
+    // Agendamentos: Exclusivo para equipe
     match /appointments/{apptId} {
       allow read, write: if isStaff();
     }
 
+    // Prontuários: Apenas nível 2 (Clínico) ou superior
     match /medical_records/{recordId} {
       allow read, write: if isStaff() && (getAuthority() >= 2 || isAdmin());
     }
 
     match /services/{id} { 
-      allow read: if true; 
+      allow read: if isSignedIn(); 
       allow write: if isAdmin(); 
     }
   }

@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
-import { Star, Stethoscope, Loader2, ArrowRight } from "lucide-react";
+import { Star, Stethoscope, Loader2, ArrowRight, ShieldCheck } from "lucide-react";
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
 
@@ -23,7 +23,7 @@ export default function LandingPage() {
 
   useEffect(() => {
     if (!isUserLoading && !isLoadingDoc && user && userData) {
-      if (userData.authorityLevel >= 1 || user.email === "luizhenrique8759@gmail.com") {
+      if (userData.authorityLevel >= 1) {
         router.push('/admin');
       } else {
         router.push('/dashboard');
@@ -37,9 +37,9 @@ export default function LandingPage() {
     if (!user) {
       return (
         <div className="flex gap-4 items-center">
-          <Link className="text-sm font-bold hover:text-primary transition-colors" href="/auth">Entrar</Link>
-          <Button asChild className="rounded-full px-8 h-10 font-bold bg-primary shadow-lg shadow-primary/20">
-            <Link href="/booking">Agendar Agora</Link>
+          <Link className="text-sm font-bold hover:text-primary transition-colors" href="/auth">Acesso Equipe</Link>
+          <Button asChild className="rounded-full px-8 h-10 font-bold bg-primary shadow-lg">
+            <Link href="/auth">Entrar</Link>
           </Button>
         </div>
       );
@@ -47,7 +47,7 @@ export default function LandingPage() {
 
     return (
       <Button asChild variant="outline" className="rounded-full">
-        <Link href={(userData?.authorityLevel || 0) >= 1 ? "/admin" : "/dashboard"}>Meu Painel</Link>
+        <Link href={(userData?.authorityLevel || 0) >= 1 ? "/admin" : "/dashboard"}>Ir para o Painel</Link>
       </Button>
     );
   };
@@ -74,17 +74,17 @@ export default function LandingPage() {
             <div className="grid gap-12 lg:grid-cols-2 items-center">
               <div className="space-y-6 z-10">
                 <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest">
-                  <Star className="h-3 w-3 fill-current" /> Clínica de Referência
+                  <Star className="h-3 w-3 fill-current" /> Uso Interno Clínico
                 </div>
                 <h1 className="text-5xl md:text-7xl font-headline font-black text-foreground leading-[1.1]">
-                  Seu sorriso em <span className="text-primary">Sincronia</span>.
+                  Gestão Odontológica em <span className="text-primary">Sincronia</span>.
                 </h1>
                 <p className="max-w-[500px] text-muted-foreground text-lg md:text-xl">
-                  Tecnologia e humanização para transformar sua saúde bucal.
+                  Centralize agendamentos, prontuários e faturamento em uma única plataforma para sua equipe.
                 </p>
                 <div className="flex gap-4">
                   <Button asChild size="lg" className="rounded-full px-10 h-14 text-lg font-bold">
-                    <Link href="/booking">Agendar <ArrowRight className="ml-2 h-5 w-5" /></Link>
+                    <Link href="/auth">Entrar no Sistema <ArrowRight className="ml-2 h-5 w-5" /></Link>
                   </Button>
                 </div>
               </div>
@@ -94,6 +94,7 @@ export default function LandingPage() {
                     src="https://picsum.photos/seed/dental/800/800"
                     alt="Dental Office"
                     className="object-cover w-full h-full"
+                    data-ai-hint="modern clinic"
                   />
                 </div>
               </div>

@@ -59,9 +59,8 @@ export default function AdminDashboard() {
 
   const isAuthorized = useMemo(() => {
     if (isUserLoading || isLoadingUserData) return false;
-    const email = user?.email || "";
-    return authorityLevel >= 1 || email === "luizhenrique8759@gmail.com" || email === "luiz87596531@gmail.com";
-  }, [isUserLoading, isLoadingUserData, authorityLevel, user]);
+    return authorityLevel >= 1;
+  }, [isUserLoading, isLoadingUserData, authorityLevel]);
 
   const usersRef = useMemoFirebase(() => {
     if (!db || !isAuthorized) return null;
@@ -93,7 +92,7 @@ export default function AdminDashboard() {
     if (!auth) return;
     try {
       await signOut(auth);
-      router.push('/');
+      router.push('/auth');
     } catch (error) {
       toast({ variant: "destructive", title: "Erro ao sair" });
     }
@@ -128,11 +127,15 @@ export default function AdminDashboard() {
     const formData = new FormData(e.currentTarget);
     const name = formData.get('name') as string;
     const age = parseInt(formData.get('age') as string);
+    const email = (formData.get('email') as string) || null;
 
     try {
+      // Criamos apenas o documento do usuário. Se o e-mail for usado para login, 
+      // o AuthPage sincronizará os dados existentes.
       await addDoc(collection(db, 'users'), {
         name,
         age,
+        email,
         role: 'patient',
         authorityLevel: 0,
         createdAt: new Date().toISOString(),
@@ -141,7 +144,7 @@ export default function AdminDashboard() {
       toast({ title: "Paciente Cadastrado", description: `${name} foi adicionado ao sistema.` });
       (e.target as HTMLFormElement).reset();
     } catch (error) {
-      toast({ variant: "destructive", title: "Erro ao cadastrar", description: "Verifique suas permissões." });
+      toast({ variant: "destructive", title: "Erro ao cadastrar", description: "Verifique suas permissões de administrador." });
     } finally {
       setIsRegistering(false);
     }
@@ -270,7 +273,7 @@ export default function AdminDashboard() {
                         </TableCell>
                       </TableRow>
                     ))}
-                    {appointments?.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">Vazio.</TableCell></TableRow>}
+                    {appointments?.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">Nenhum agendamento encontrado.</TableCell></TableRow>}
                   </TableBody>
                 </Table>
               )}
@@ -280,11 +283,11 @@ export default function AdminDashboard() {
 
         <TabsContent value="patients">
           <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div className="relative w-full max-w-sm">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input 
-                  placeholder="Buscar por nome ou e-mail..." 
+                  placeholder="Buscar paciente..." 
                   className="pl-10 h-11 rounded-xl"
                   value={patientSearch}
                   onChange={(e) => setPatientSearch(e.target.value)}
@@ -292,24 +295,28 @@ export default function AdminDashboard() {
               </div>
               <Dialog>
                 <DialogTrigger asChild>
-                  <Button className="rounded-full gap-2"><UserPlus className="h-4 w-4" /> Novo Paciente</Button>
+                  <Button className="rounded-full gap-2 w-full md:w-auto"><UserPlus className="h-4 w-4" /> Cadastrar Novo Paciente</Button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-[425px] rounded-3xl">
+                <DialogContent className="sm:max-w-[425px] rounded-[2rem]">
                   <DialogHeader>
-                    <DialogTitle>Cadastrar Paciente</DialogTitle>
-                    <DialogDescription>Adicione as informações básicas do paciente para o prontuário.</DialogDescription>
+                    <DialogTitle>Cadastro de Paciente</DialogTitle>
+                    <DialogDescription>As informações do paciente serão usadas para agendamentos e prontuários.</DialogDescription>
                   </DialogHeader>
                   <form onSubmit={handleRegisterPatient} className="space-y-4 py-4">
                     <div className="space-y-2">
                       <Label htmlFor="name">Nome Completo</Label>
-                      <Input id="name" name="name" required placeholder="Ex: João da Silva" className="rounded-xl h-11" />
+                      <Input id="name" name="name" required placeholder="João da Silva" className="rounded-xl h-11" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="email">E-mail (Opcional)</Label>
+                      <Input id="email" name="email" type="email" placeholder="exemplo@gmail.com" className="rounded-xl h-11" />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="age">Idade</Label>
                       <Input id="age" name="age" type="number" required placeholder="Ex: 25" className="rounded-xl h-11" />
                     </div>
-                    <Button type="submit" disabled={isRegistering} className="w-full h-12 rounded-xl">
-                      {isRegistering ? <Loader2 className="animate-spin" /> : "Salvar Cadastro"}
+                    <Button type="submit" disabled={isRegistering} className="w-full h-12 rounded-xl mt-4">
+                      {isRegistering ? <Loader2 className="animate-spin" /> : "Salvar Paciente"}
                     </Button>
                   </form>
                 </DialogContent>
@@ -319,14 +326,14 @@ export default function AdminDashboard() {
             <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
               <CardContent className="p-0">
                 <Table>
-                  <TableHeader><TableRow><TableHead className="pl-6">Nome</TableHead><TableHead>Idade</TableHead><TableHead>E-mail</TableHead><TableHead className="text-right pr-6">Data de Cadastro</TableHead></TableRow></TableHeader>
+                  <TableHeader><TableRow><TableHead className="pl-6">Nome</TableHead><TableHead>Idade</TableHead><TableHead>E-mail</TableHead><TableHead className="text-right pr-6">Cadastro</TableHead></TableRow></TableHeader>
                   <TableBody>
                     {filteredPatients?.map((p) => (
                       <TableRow key={p.id}>
                         <TableCell className="font-bold pl-6">{p.name}</TableCell>
                         <TableCell>{p.age || 'N/A'}</TableCell>
-                        <TableCell className="text-muted-foreground">{p.email || 'Presencial'}</TableCell>
-                        <TableCell className="text-right pr-6 text-xs text-muted-foreground">{p.createdAt ? new Date(p.createdAt).toLocaleDateString('pt-BR') : 'N/A'}</TableCell>
+                        <TableCell className="text-muted-foreground">{p.email || 'Não informado'}</TableCell>
+                        <TableCell className="text-right pr-6 text-xs text-muted-foreground">{p.createdAt ? new Date(p.createdAt).toLocaleDateString('pt-BR') : '-'}</TableCell>
                       </TableRow>
                     ))}
                     {filteredPatients?.length === 0 && <TableRow><TableCell colSpan={4} className="text-center py-10 text-muted-foreground">Nenhum paciente encontrado.</TableCell></TableRow>}
@@ -340,20 +347,30 @@ export default function AdminDashboard() {
         <TabsContent value="management">
           <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
             <CardHeader className="bg-muted/5 border-b">
-              <CardTitle className="text-xl">Equipe e Acessos</CardTitle>
+              <CardTitle className="text-xl">Gestão de Equipe e Permissões</CardTitle>
+              <CardDescription>Apenas administradores podem alterar níveis de autoridade.</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               <Table>
-                <TableHeader><TableRow><TableHead className="pl-6">Nome</TableHead><TableHead>E-mail</TableHead><TableHead>Nível</TableHead><TableHead className="text-right pr-6">Ação</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead className="pl-6">Usuário</TableHead><TableHead>E-mail</TableHead><TableHead>Cargo Atual</TableHead><TableHead className="text-right pr-6">Alterar Nível</TableHead></TableRow></TableHeader>
                 <TableBody>
-                  {allUsers?.filter(u => u.role !== 'patient').map((u) => (
+                  {allUsers?.map((u) => (
                     <TableRow key={u.id}>
                       <TableCell className="font-bold pl-6">{u.name}</TableCell>
                       <TableCell className="text-muted-foreground">{u.email}</TableCell>
-                      <TableCell><Badge variant="outline">Lvl {u.authorityLevel || 0}</Badge></TableCell>
+                      <TableCell>
+                        <Badge variant={u.authorityLevel > 0 ? "secondary" : "outline"}>
+                          {roleNames[u.authorityLevel || 0]}
+                        </Badge>
+                      </TableCell>
                       <TableCell className="text-right pr-6">
-                        <select className="border rounded p-1 text-xs" value={u.authorityLevel || 0} onChange={(e) => handleUpdateLevel(u, e.target.value)}>
-                          {roleNames.map((name, i) => <option key={i} value={i}>{name} ({i})</option>)}
+                        <select 
+                          className="border rounded-lg p-1 text-xs bg-white h-8" 
+                          value={u.authorityLevel || 0} 
+                          onChange={(e) => handleUpdateLevel(u, e.target.value)}
+                          disabled={authorityLevel < 3 || u.email === "luizhenrique8759@gmail.com"}
+                        >
+                          {roleNames.map((name, i) => <option key={i} value={i}>{name}</option>)}
                         </select>
                       </TableCell>
                     </TableRow>
@@ -365,8 +382,11 @@ export default function AdminDashboard() {
         </TabsContent>
 
         <TabsContent value="finance">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card className="rounded-3xl bg-primary text-white"><CardHeader><CardTitle>Faturamento Estimado</CardTitle></CardHeader><CardContent><p className="text-4xl font-black">R$ {appointments?.reduce((acc, a) => acc + (SERVICES.find(s => s.id === a.serviceId)?.price || 0), 0).toLocaleString('pt-BR')}</p></CardContent></Card>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <Card className="rounded-3xl bg-primary text-white border-none shadow-lg">
+              <CardHeader><CardTitle className="text-sm font-medium opacity-80 uppercase tracking-wider">Faturamento Total</CardTitle></CardHeader>
+              <CardContent><p className="text-4xl font-black">R$ {appointments?.reduce((acc, a) => acc + (SERVICES.find(s => s.id === a.serviceId)?.price || 0), 0).toLocaleString('pt-BR')}</p></CardContent>
+            </Card>
           </div>
         </TabsContent>
       </Tabs>
