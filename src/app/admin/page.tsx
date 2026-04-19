@@ -41,32 +41,32 @@ export default function AdminDashboard() {
   
   const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
-  const isProfessional = useMemo(() => {
+  // Garantir que a verificação de autoridade seja resiliente
+  const isAuthorized = useMemo(() => {
+    if (isUserLoading) return false;
     if (isMasterAdmin) return true;
     if (isLoadingUserData) return false;
     return userData?.role === 'professional' || userData?.role === 'admin';
-  }, [isMasterAdmin, isLoadingUserData, userData]);
+  }, [isMasterAdmin, isLoadingUserData, userData, isUserLoading]);
 
   const authorityLevel = useMemo(() => {
     if (isMasterAdmin) return 4;
     return userData?.authorityLevel || 0;
   }, [isMasterAdmin, userData]);
 
-  // Bloqueio de consultas até que a autoridade esteja confirmada
-  const canPerformQueries = !isUserLoading && (isMasterAdmin || !isLoadingUserData);
-  const shouldFetchData = canPerformQueries && isProfessional;
-
+  // Consultas aos usuários (Nível 3+)
   const usersRef = useMemoFirebase(() => {
-    if (!db || !shouldFetchData) return null;
+    if (!db || !isAuthorized || (authorityLevel < 3 && !isMasterAdmin)) return null;
     return query(collection(db, 'users'), orderBy('name', 'asc'));
-  }, [db, shouldFetchData]);
+  }, [db, isAuthorized, authorityLevel, isMasterAdmin]);
   
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
 
+  // Consultas aos agendamentos (Nível 1+)
   const apptsQuery = useMemoFirebase(() => {
-    if (!db || !shouldFetchData) return null;
+    if (!db || !isAuthorized || (authorityLevel < 1 && !isMasterAdmin)) return null;
     return query(collection(db, 'appointments'), orderBy('date', 'asc'));
-  }, [db, shouldFetchData]);
+  }, [db, isAuthorized, authorityLevel, isMasterAdmin]);
   
   const { data: appointments, isLoading: isLoadingAppts } = useCollection(apptsQuery);
 
@@ -180,10 +180,10 @@ export default function AdminDashboard() {
     }
   };
 
-  if (isUserLoading || isLoadingUserData) return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (isUserLoading) return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!user) return null;
 
-  if (!isProfessional && !isMasterAdmin) {
+  if (!isAuthorized) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center space-y-4">
         <ShieldAlert className="h-16 w-16 text-destructive" />
