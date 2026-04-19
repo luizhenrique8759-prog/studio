@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Stethoscope, Github, Mail } from "lucide-react";
+import { Stethoscope, Mail } from "lucide-react";
 import Link from 'next/link';
 
 export default function AuthPage() {
@@ -41,15 +41,12 @@ export default function AuthPage() {
         <Card className="shadow-2xl border-t-4 border-t-primary">
           <CardHeader className="space-y-1">
             <CardTitle className="text-xl">Acesso</CardTitle>
-            <CardDescription>Use seu e-mail ou uma conta social</CardDescription>
+            <CardDescription>Use seu e-mail ou sua conta Google</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
-            <div className="grid grid-cols-2 gap-4">
-              <Button variant="outline" className="rounded-lg">
-                <Github className="mr-2 h-4 w-4" /> Github
-              </Button>
-              <Button variant="outline" className="rounded-lg">
-                <Mail className="mr-2 h-4 w-4" /> Google
+            <div className="grid grid-cols-1 gap-4">
+              <Button variant="outline" className="rounded-lg w-full">
+                <Mail className="mr-2 h-4 w-4" /> Continuar com Google
               </Button>
             </div>
             <div className="relative">
@@ -57,7 +54,7 @@ export default function AuthPage() {
                 <span className="w-full border-t" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">Ou continue com</span>
+                <span className="bg-background px-2 text-muted-foreground">Ou continue com e-mail</span>
               </div>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
