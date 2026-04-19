@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -7,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MOCK_APPOINTMENTS, SERVICES, Appointment } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, Sparkles } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, Sparkles, CheckCircle2 } from "lucide-react";
 import { generateClinicalSummary } from "@/ai/flows/generate-clinical-summary";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser } from '@/firebase';
@@ -26,7 +27,7 @@ export default function AdminDashboard() {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
   
-  const [appointments] = useState<Appointment[]>(MOCK_APPOINTMENTS);
+  const [appointments, setAppointments] = useState<Appointment[]>(MOCK_APPOINTMENTS);
   const [loading, setLoading] = useState<string | null>(null);
   const [searchPatient, setSearchPatient] = useState("");
   const [selectedPatientRecord, setSelectedPatientRecord] = useState<{id: string, name: string} | null>(null);
@@ -50,6 +51,16 @@ export default function AdminDashboard() {
     } catch (error) {
       toast({ variant: "destructive", title: "Erro ao sair" });
     }
+  };
+
+  const handleConfirmAppointment = (id: string) => {
+    setAppointments(prev => prev.map(apt => 
+      apt.id === id ? { ...apt, status: 'confirmed' as const } : apt
+    ));
+    toast({
+      title: "Agendamento Confirmado",
+      description: "O status do paciente foi atualizado com sucesso.",
+    });
   };
 
   const analyzeClinicalNote = async () => {
@@ -143,7 +154,8 @@ export default function AdminDashboard() {
                     <TableHead>Serviço</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead>Horário</TableHead>
-                    <TableHead className="text-right">Status</TableHead>
+                    <TableHead className="text-center">Status</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -153,7 +165,7 @@ export default function AdminDashboard() {
                       <TableCell>{SERVICES.find(s => s.id === apt.serviceId)?.name}</TableCell>
                       <TableCell>{apt.date}</TableCell>
                       <TableCell>{apt.time}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-center">
                         <Badge 
                           className={`rounded-full px-4 py-1 font-bold text-[10px] uppercase tracking-wider ${
                             apt.status === 'confirmed' 
@@ -164,6 +176,21 @@ export default function AdminDashboard() {
                         >
                           {apt.status === 'confirmed' ? 'Confirmado' : 'Pendente'}
                         </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {apt.status === 'pending' && (
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            className="text-accent hover:text-accent hover:bg-accent/10 rounded-full"
+                            onClick={() => handleConfirmAppointment(apt.id)}
+                          >
+                            <CheckCircle2 className="h-4 w-4 mr-1" /> Confirmar
+                          </Button>
+                        )}
+                        {apt.status === 'confirmed' && (
+                          <span className="text-[10px] text-muted-foreground italic mr-4">Atendido</span>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
