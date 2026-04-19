@@ -13,17 +13,24 @@ service cloud.firestore {
       return exists(userDocPath) ? get(userDocPath).data.authorityLevel : 0;
     }
 
+    function isMasterAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == "luizhenrique8759@gmail.com" || 
+        request.auth.token.email == "luiz87596531@gmail.com"
+      );
+    }
+
     function hasAdminPrivileges() {
-      return isSignedIn() && (getAuthority() >= 3 || request.auth.token.email == "luizhenrique8759@gmail.com");
+      return isSignedIn() && (isMasterAdmin() || getAuthority() >= 3);
     }
 
     function hasStaffPrivileges() {
-      return isSignedIn() && (getAuthority() >= 1 || request.auth.token.email == "luizhenrique8759@gmail.com");
+      return isSignedIn() && (isMasterAdmin() || getAuthority() >= 1);
     }
 
     match /users/{userId} {
       allow get: if isSignedIn();
-      allow list: if hasAdminPrivileges();
+      allow list: if hasStaffPrivileges();
       allow create: if isSignedIn() && request.auth.uid == userId;
       allow update: if hasAdminPrivileges() || (isSignedIn() && request.auth.uid == userId);
     }
@@ -31,8 +38,7 @@ service cloud.firestore {
     match /appointments/{apptId} {
       allow list: if isSignedIn() && (
         hasStaffPrivileges() || 
-        (resource != null && resource.data.patientId == request.auth.uid) ||
-        (request.query.limit <= 100)
+        (resource != null && resource.data.patientId == request.auth.uid)
       );
       
       allow get: if isSignedIn() && (
@@ -40,7 +46,10 @@ service cloud.firestore {
         resource.data.patientId == request.auth.uid
       );
       
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && (
+        hasStaffPrivileges() || 
+        request.resource.data.patientId == request.auth.uid
+      );
       
       allow update, delete: if isSignedIn() && (
         hasStaffPrivileges() || 
@@ -49,7 +58,7 @@ service cloud.firestore {
     }
 
     match /medical_records/{recordId} {
-      allow read, write: if isSignedIn() && (getAuthority() >= 2 || request.auth.token.email == "luizhenrique8759@gmail.com");
+      allow read, write: if isSignedIn() && (hasStaffPrivileges() && getAuthority() >= 2);
     }
 
     match /services/{id} { 

@@ -30,7 +30,6 @@ export default function BookingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [availableDates, setAvailableDates] = useState<Date[]>([]);
 
-  // Carregar datas apenas no cliente para evitar erro de hidratação
   useEffect(() => {
     const dates = [];
     let current = startOfDay(new Date());
@@ -52,25 +51,29 @@ export default function BookingPage() {
   
   const authorityLevel = useMemo(() => {
     if (!user) return 0;
-    if (user.email === "luizhenrique8759@gmail.com") return 4;
+    const email = user.email || "";
+    if (email === "luizhenrique8759@gmail.com") return 4;
+    if (email === "luiz87596531@gmail.com") return 3;
     return userData?.authorityLevel || 0;
   }, [userData, user]);
 
-  const isAdmin = useMemo(() => authorityLevel >= 3, [authorityLevel]);
+  // Colaboradores (Nível 1 ou superior) podem agendar para outros
+  const isStaff = useMemo(() => authorityLevel >= 1, [authorityLevel]);
 
   const [targetPatient, setTargetPatient] = useState<{ id: string, name: string } | null>(null);
   const [patientSearch, setPatientSearch] = useState("");
 
   const profQuery = useMemoFirebase(() => {
     if (!db) return null;
+    // Profissionais são Nível 2 ou superior
     return query(collection(db, 'users'), where('authorityLevel', '>=', 2));
   }, [db]);
   const { data: professionals, isLoading: isLoadingProfs } = useCollection(profQuery);
 
   const allUsersQuery = useMemoFirebase(() => {
-    if (!db || !isAdmin) return null;
+    if (!db || !isStaff) return null;
     return query(collection(db, 'users'), orderBy('name', 'asc'));
-  }, [db, isAdmin]);
+  }, [db, isStaff]);
   const { data: allPatients } = useCollection(allUsersQuery);
 
   const filteredPatients = useMemo(() => {
@@ -83,7 +86,7 @@ export default function BookingPage() {
 
   const handleNext = () => setStep(s => s + 1);
   const handleBack = () => {
-    if (step === (isAdmin ? 5 : 4) && confirmedDate) {
+    if (step === (isStaff ? 5 : 4) && confirmedDate) {
       setConfirmedDate(false);
       return;
     }
@@ -98,8 +101,8 @@ export default function BookingPage() {
     
     setIsSubmitting(true);
     try {
-      const finalPatientId = (isAdmin && targetPatient) ? targetPatient.id : user.uid;
-      const finalPatientName = (isAdmin && targetPatient) ? targetPatient.name : (user.displayName || userData?.name || 'Paciente');
+      const finalPatientId = (isStaff && targetPatient) ? targetPatient.id : user.uid;
+      const finalPatientName = (isStaff && targetPatient) ? targetPatient.name : (user.displayName || userData?.name || 'Paciente');
 
       const appointmentData = {
         patientId: finalPatientId,
@@ -116,7 +119,7 @@ export default function BookingPage() {
       };
 
       await addDoc(collection(db, 'appointments'), appointmentData);
-      setStep(isAdmin ? 6 : 5); 
+      setStep(isStaff ? 6 : 5); 
     } catch (error) {
       console.error(error);
       toast({ variant: "destructive", title: "Erro ao agendar" });
@@ -125,7 +128,13 @@ export default function BookingPage() {
     }
   };
 
-  if (isUserLoading || isLoadingUserDoc) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-primary h-8 w-8" /></div>;
+  if (isUserLoading || isLoadingUserDoc) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="animate-spin text-primary h-8 w-8" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
@@ -136,16 +145,16 @@ export default function BookingPage() {
              <span className="text-xl font-headline font-bold text-primary">Sync</span>
           </Link>
           <div className="hidden md:flex gap-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
-            {isAdmin && <span className={step >= 1 ? "text-primary" : ""}>Paciente</span>}
-            <span className={step >= (isAdmin ? 2 : 1) ? "text-primary" : ""}>Dentista</span>
-            <span className={step >= (isAdmin ? 3 : 2) ? "text-primary" : ""}>Serviço</span>
-            <span className={step >= (isAdmin ? 4 : 3) ? "text-primary" : ""}>Agenda</span>
-            <span className={step >= (isAdmin ? 5 : 4) ? "text-primary" : ""}>Resumo</span>
+            {isStaff && <span className={step >= 1 ? "text-primary" : ""}>Paciente</span>}
+            <span className={step >= (isStaff ? 2 : 1) ? "text-primary" : ""}>Dentista</span>
+            <span className={step >= (isStaff ? 3 : 2) ? "text-primary" : ""}>Serviço</span>
+            <span className={step >= (isStaff ? 4 : 3) ? "text-primary" : ""}>Agenda</span>
+            <span className={step >= (isStaff ? 5 : 4) ? "text-primary" : ""}>Resumo</span>
           </div>
         </header>
 
-        {/* Passo 1: Seleção de Paciente (Apenas Admin) */}
-        {step === 1 && isAdmin && (
+        {/* Passo 1: Seleção de Paciente (Apenas Staff) */}
+        {step === 1 && isStaff && (
           <div className="grid gap-6 animate-in fade-in slide-in-from-bottom-4">
              <h2 className="text-3xl font-headline font-bold">Quem é o paciente?</h2>
             <Input 
@@ -160,6 +169,7 @@ export default function BookingPage() {
                 onClick={() => setTargetPatient(null)}
               >
                 <p className="font-bold">Agendar para mim</p>
+                <p className="text-xs text-muted-foreground">Você ({user.displayName || 'Paciente'})</p>
               </Card>
               {filteredPatients?.map((p) => (
                 <Card 
@@ -176,8 +186,8 @@ export default function BookingPage() {
           </div>
         )}
 
-        {/* Passo Dentista (Agora o primeiro para o paciente) */}
-        {((step === 1 && !isAdmin) || (step === 2 && isAdmin)) && (
+        {/* Passo Dentista (Primeiro passo para o Paciente) */}
+        {((step === 1 && !isStaff) || (step === 2 && isStaff)) && (
           <div className="grid gap-6 animate-in fade-in slide-in-from-right-4">
             <h2 className="text-3xl font-headline font-bold">Com qual especialista?</h2>
             {isLoadingProfs ? (
@@ -199,17 +209,18 @@ export default function BookingPage() {
                     </CardHeader>
                   </Card>
                 ))}
+                {professionals?.length === 0 && <p className="col-span-3 text-center py-10 text-muted-foreground">Nenhum profissional disponível no momento.</p>}
               </div>
             )}
             <div className="flex justify-between pt-4">
-              {isAdmin && <Button variant="outline" onClick={handleBack} className="rounded-full px-8">Voltar</Button>}
+              {isStaff && <Button variant="outline" onClick={handleBack} className="rounded-full px-8">Voltar</Button>}
               <Button disabled={!selectedProfessional} onClick={handleNext} className="ml-auto rounded-full px-10 h-12">Próximo</Button>
             </div>
           </div>
         )}
 
         {/* Passo Serviço */}
-        {((step === 2 && !isAdmin) || (step === 3 && isAdmin)) && (
+        {((step === 2 && !isStaff) || (step === 3 && isStaff)) && (
           <div className="grid gap-6 animate-in fade-in slide-in-from-bottom-4">
             <h2 className="text-3xl font-headline font-bold">Qual procedimento?</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -238,7 +249,7 @@ export default function BookingPage() {
         )}
 
         {/* Passo Agenda */}
-        {((step === 3 && !isAdmin) || (step === 4 && isAdmin)) && (
+        {((step === 3 && !isStaff) || (step === 4 && isStaff)) && (
           <div className="grid gap-8 animate-in fade-in">
             <h2 className="text-3xl font-headline font-bold text-center">Selecione o Dia</h2>
             <div className="flex flex-wrap justify-center gap-3">
@@ -283,21 +294,25 @@ export default function BookingPage() {
           </div>
         )}
 
-        {/* Resumo e Sucesso... (Mantido das versões anteriores estáveis) */}
-        {((step === 4 && !isAdmin) || (step === 5 && isAdmin)) && (
+        {/* Resumo */}
+        {((step === 4 && !isStaff) || (step === 5 && isStaff)) && (
           <div className="max-w-md mx-auto animate-in zoom-in">
             <Card className="border-2 border-primary shadow-2xl rounded-[2.5rem]">
               <CardHeader className="text-center bg-primary text-primary-foreground py-8">
                 <CardTitle className="text-2xl font-headline">CONFIRMAÇÃO</CardTitle>
-                {isAdmin && targetPatient && <p className="text-xs">Para: {targetPatient.name}</p>}
+                {(isStaff && targetPatient) ? (
+                  <p className="text-xs opacity-90 mt-2">Agendamento para: {targetPatient.name}</p>
+                ) : (
+                  <p className="text-xs opacity-90 mt-2">Agendamento pessoal</p>
+                )}
               </CardHeader>
               <CardContent className="space-y-6 pt-10">
                 <div className="flex flex-col gap-4">
-                  <p><strong>Especialista:</strong> {selectedProfessional?.name}</p>
-                  <p><strong>Procedimento:</strong> {selectedService?.name}</p>
-                  <p><strong>Data/Hora:</strong> {selectedDate && format(selectedDate, "dd/MM")} às {selectedTime}</p>
+                  <p className="text-sm"><strong>Especialista:</strong> {selectedProfessional?.name}</p>
+                  <p className="text-sm"><strong>Procedimento:</strong> {selectedService?.name}</p>
+                  <p className="text-sm"><strong>Data/Hora:</strong> {selectedDate && format(selectedDate, "dd/MM")} às {selectedTime}</p>
                 </div>
-                <div className="pt-6 border-t flex justify-between">
+                <div className="pt-6 border-t flex justify-between items-center">
                   <span className="font-bold">Total</span>
                   <span className="text-2xl font-bold text-primary">R$ {selectedService?.price}</span>
                 </div>
@@ -311,7 +326,8 @@ export default function BookingPage() {
           </div>
         )}
 
-        {((step === 5 && !isAdmin) || (step === 6 && isAdmin)) && (
+        {/* Sucesso */}
+        {((step === 5 && !isStaff) || (step === 6 && isStaff)) && (
           <div className="text-center space-y-6 py-12 animate-in fade-in">
             <div className="mx-auto w-24 h-24 bg-accent text-white rounded-full flex items-center justify-center shadow-xl">
               <Check className="w-12 h-12" />
@@ -320,7 +336,7 @@ export default function BookingPage() {
             <p className="text-muted-foreground">O agendamento foi realizado com sucesso.</p>
             <div className="flex justify-center gap-4 pt-8">
               <Button asChild className="rounded-full px-10 h-12">
-                <Link href={authorityLevel >= 1 ? "/admin" : "/dashboard"}>Ver Minha Agenda</Link>
+                <Link href={isStaff ? "/admin" : "/dashboard"}>Ver Minha Agenda</Link>
               </Button>
             </div>
           </div>
