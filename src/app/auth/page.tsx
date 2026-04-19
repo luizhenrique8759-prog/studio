@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Stethoscope, Mail } from "lucide-react";
+import { Stethoscope } from "lucide-react";
 import Link from 'next/link';
 
 export default function AuthPage() {
@@ -41,22 +41,9 @@ export default function AuthPage() {
         <Card className="shadow-2xl border-t-4 border-t-primary">
           <CardHeader className="space-y-1">
             <CardTitle className="text-xl">Acesso</CardTitle>
-            <CardDescription>Use seu e-mail ou sua conta Google</CardDescription>
+            <CardDescription>Use seu e-mail para continuar</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
-            <div className="grid grid-cols-1 gap-4">
-              <Button variant="outline" className="rounded-lg w-full">
-                <Mail className="mr-2 h-4 w-4" /> Continuar com Google
-              </Button>
-            </div>
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">Ou continue com e-mail</span>
-              </div>
-            </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">E-mail</Label>
