@@ -3,19 +3,18 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Função Master Admin: Prioridade absoluta baseada no e-mail blindado
-    function isMasterAdmin() {
-      return request.auth != null && request.auth.token.email == "luizhenrique8759@gmail.com";
-    }
-
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Verifica nível de autoridade buscando o documento do usuário
-    // Usamos get() de forma segura
+    function isMasterAdmin() {
+      return isSignedIn() && request.auth.token.email == "luizhenrique8759@gmail.com";
+    }
+
+    // Busca autoridade de forma segura (retorna 0 se não encontrar)
     function getAuthority() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('authorityLevel', 0);
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc != null ? userDoc.data.get('authorityLevel', 0) : 0;
     }
 
     // Regra Global Master: Se for o admin mestre, permite tudo imediatamente
@@ -33,13 +32,15 @@ service cloud.firestore {
 
     // Agendamentos
     match /appointments/{apptId} { 
-      // Permite listagem global para profissionais Nível 1+ ou Admin
-      allow list: if isMasterAdmin() || (isSignedIn() && getAuthority() >= 1);
+      // Permite listagem se for Admin/Colaborador OU se a consulta for filtrada pelo ID do paciente
+      allow list: if isSignedIn() && (
+        isMasterAdmin() || 
+        getAuthority() >= 1 || 
+        (resource == null) // Permite iniciar a avaliação da consulta filtrada
+      );
       
-      // Permite listagem filtrada para pacientes (deve usar where 'patientId' == uid)
-      allow list: if isSignedIn() && resource.data.patientId == request.auth.uid;
-      
-      allow get: if isSignedIn() && (
+      // Regra de segurança em nível de documento para listagem filtrada
+      allow read: if isSignedIn() && (
         isMasterAdmin() || 
         getAuthority() >= 1 || 
         resource.data.patientId == request.auth.uid
@@ -49,7 +50,7 @@ service cloud.firestore {
       allow update, delete: if isMasterAdmin() || (isSignedIn() && getAuthority() >= 1);
     }
 
-    // Prontuários Médicos: Nível 2 ou 4 (Clínico) ou Nível 3 (Admin)
+    // Prontuários Médicos
     match /medical_records/{recordId} {
       allow read, write: if isMasterAdmin() || (isSignedIn() && (getAuthority() >= 2 || getAuthority() == 4));
     }

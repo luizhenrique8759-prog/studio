@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SERVICES, TIME_SLOTS } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, CheckCircle2, Calendar as CalendarIcon, Clock, Users, DollarSign, Shield, Stethoscope, Activity, UserCog } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, Plus, Search, ShieldAlert, CheckCircle2, Calendar as CalendarIcon, Clock, Users, DollarSign, Shield, Stethoscope, Activity, UserCog, User } from "lucide-react";
 import { generateClinicalSummary } from "@/ai/flows/generate-clinical-summary";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { collection, doc, setDoc, deleteDoc, updateDoc, query, orderBy } from 'firebase/firestore';
 import { format, addDays, isSunday, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import Link from 'next/link';
 
 const HARDCODED_ADMIN_EMAIL = "luizhenrique8759@gmail.com";
 
@@ -42,7 +43,7 @@ export default function AdminDashboard() {
   const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
   const authorityLevel = useMemo(() => {
-    if (isMasterAdmin) return 3; // Admin Mestre é Nível 3 (Administrativo)
+    if (isMasterAdmin) return 3;
     return userData?.authorityLevel || 0;
   }, [isMasterAdmin, userData]);
 
@@ -52,7 +53,7 @@ export default function AdminDashboard() {
     return authorityLevel >= 1;
   }, [isMasterAdmin, isLoadingUserData, authorityLevel, isUserLoading]);
 
-  // Consultas condicionais para evitar erros de permissão no carregamento
+  // Consultas baseadas na autoridade carregada
   const usersRef = useMemoFirebase(() => {
     if (!db || !isAuthorized || (authorityLevel < 3 && !isMasterAdmin)) return null;
     return query(collection(db, 'users'), orderBy('name', 'asc'));
@@ -72,10 +73,6 @@ export default function AdminDashboard() {
   const [selectedPatientRecord, setSelectedPatientRecord] = useState<{id: string, name: string} | null>(null);
   const [newNote, setNewNote] = useState("");
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
-
-  const [reschedulingAppointment, setReschedulingAppointment] = useState<any>(null);
-  const [newDate, setNewDate] = useState<Date | undefined>(undefined);
-  const [newTime, setNewTime] = useState<string>("");
 
   useEffect(() => {
     if (!isUserLoading && !user) {
@@ -135,16 +132,6 @@ export default function AdminDashboard() {
     }, 0);
   }, [appointments]);
 
-  const availableDates = useMemo(() => {
-    const dates = [];
-    let current = startOfDay(new Date());
-    while (dates.length < 12) {
-      if (!isSunday(current)) dates.push(new Date(current));
-      current = addDays(current, 1);
-    }
-    return dates;
-  }, []);
-
   const analyzeClinicalNote = async () => {
     if (!newNote || !selectedPatientRecord) return;
     setLoading('ai-analysis');
@@ -189,14 +176,26 @@ export default function AdminDashboard() {
             <h1 className="text-4xl font-headline font-bold text-primary tracking-tight">
               Portal Administrador
             </h1>
-            <p className="text-muted-foreground flex items-center gap-2 font-medium">
-              {isMasterAdmin ? <Shield className="h-4 w-4 text-primary" /> : <UserCog className="h-4 w-4" />} {user.email} (Nível {authorityLevel})
-            </p>
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+               <p className="text-muted-foreground flex items-center gap-2 font-medium text-sm">
+                {isMasterAdmin ? <Shield className="h-4 w-4 text-primary" /> : <UserCog className="h-4 w-4" />} {user.email} (Nível {authorityLevel})
+              </p>
+              <Badge variant="outline" className="rounded-full bg-slate-50 cursor-pointer hover:bg-slate-100" asChild>
+                <Link href="/dashboard" className="flex items-center gap-1">
+                  <Activity className="h-3 w-3" /> Acessar Área do Paciente
+                </Link>
+              </Badge>
+            </div>
           </div>
         </div>
-        <Button variant="outline" className="rounded-full text-destructive border-destructive" onClick={handleLogout}>
-          <LogOut className="mr-2 h-4 w-4" /> Sair
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" className="rounded-full" asChild>
+            <Link href="/">Voltar ao Início</Link>
+          </Button>
+          <Button variant="outline" className="rounded-full text-destructive border-destructive" onClick={handleLogout}>
+            <LogOut className="mr-2 h-4 w-4" /> Sair
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="appointments" className="w-full">
@@ -242,13 +241,6 @@ export default function AdminDashboard() {
                                 <CheckCircle2 className="h-5 w-5" /> <span className="ml-2 hidden sm:inline">Confirmar</span>
                               </Button>
                             )}
-                            <Button size="sm" variant="ghost" className="rounded-full hover:bg-primary/10" onClick={() => {
-                              setReschedulingAppointment(apt);
-                              setNewDate(new Date(apt.date));
-                              setNewTime(apt.time);
-                            }}>
-                              <CalendarIcon className="h-5 w-5 text-primary" /> <span className="ml-2 hidden sm:inline text-primary">Reagendar</span>
-                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -367,44 +359,6 @@ export default function AdminDashboard() {
                           <CardDescription className="font-black uppercase tracking-widest text-[10px] text-primary">Prontuário Digital</CardDescription>
                         </div>
                       </div>
-                      {canUseIA && (
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button className="rounded-full h-12 px-8 bg-primary"><Plus className="mr-2 h-5 w-5" /> Nova Evolução</Button>
-                          </DialogTrigger>
-                          <DialogContent className="sm:max-w-[700px] rounded-[2rem]">
-                            <DialogHeader>
-                              <DialogTitle className="text-2xl">Evolução Clínica Assistida por IA</DialogTitle>
-                            </DialogHeader>
-                            <div className="space-y-6 py-6">
-                              <Textarea 
-                                placeholder="Notas brutas do atendimento..." 
-                                className="min-h-[250px] rounded-2xl p-6 bg-muted/10"
-                                value={newNote}
-                                onChange={(e) => setNewNote(e.target.value)}
-                              />
-                              {aiAnalysis && (
-                                <div className="p-6 bg-accent/5 rounded-3xl border-2 border-accent/20">
-                                  <p className="text-xs font-bold mb-4 uppercase text-accent tracking-widest flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> Análise Profissional:</p>
-                                  <div className="space-y-4">
-                                    <p className="text-sm leading-relaxed font-medium">{aiAnalysis.summary}</p>
-                                    <div className="p-4 bg-white/50 rounded-xl border">
-                                      <p className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Próximos Passos:</p>
-                                      <p className="text-xs italic font-bold">{aiAnalysis.suggestedTreatment}</p>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                            <DialogFooter className="gap-2">
-                              <Button variant="outline" className="rounded-full h-12" onClick={analyzeClinicalNote} disabled={loading === 'ai-analysis'}>
-                                {loading === 'ai-analysis' ? <Loader2 className="animate-spin mr-2" /> : "Gerar Resumo IA"}
-                              </Button>
-                              <Button className="rounded-full h-12 px-10" onClick={() => {toast({title:"Ficha Atualizada!"}); setNewNote(""); setAiAnalysis(null)}}>Salvar Evolução</Button>
-                            </DialogFooter>
-                          </DialogContent>
-                        </Dialog>
-                      )}
                     </CardHeader>
                     <CardContent className="p-10 flex flex-col items-center justify-center flex-1">
                       <div className="text-center space-y-4 max-w-sm opacity-30">
