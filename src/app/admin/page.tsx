@@ -41,20 +41,18 @@ export default function AdminDashboard() {
   
   const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
-  // Garantir que a verificação de autoridade seja resiliente
-  const isAuthorized = useMemo(() => {
-    if (isUserLoading) return false;
-    if (isMasterAdmin) return true;
-    if (isLoadingUserData) return false;
-    return userData?.role === 'professional' || userData?.role === 'admin';
-  }, [isMasterAdmin, isLoadingUserData, userData, isUserLoading]);
-
   const authorityLevel = useMemo(() => {
-    if (isMasterAdmin) return 4;
+    if (isMasterAdmin) return 3; // Admin Mestre é Nível 3 (Administrativo)
     return userData?.authorityLevel || 0;
   }, [isMasterAdmin, userData]);
 
-  // Consultas aos usuários (Nível 3+)
+  const isAuthorized = useMemo(() => {
+    if (isUserLoading || isLoadingUserData) return false;
+    if (isMasterAdmin) return true;
+    return authorityLevel >= 1;
+  }, [isMasterAdmin, isLoadingUserData, authorityLevel, isUserLoading]);
+
+  // Consultas condicionais para evitar erros de permissão no carregamento
   const usersRef = useMemoFirebase(() => {
     if (!db || !isAuthorized || (authorityLevel < 3 && !isMasterAdmin)) return null;
     return query(collection(db, 'users'), orderBy('name', 'asc'));
@@ -62,7 +60,6 @@ export default function AdminDashboard() {
   
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
 
-  // Consultas aos agendamentos (Nível 1+)
   const apptsQuery = useMemoFirebase(() => {
     if (!db || !isAuthorized || (authorityLevel < 1 && !isMasterAdmin)) return null;
     return query(collection(db, 'appointments'), orderBy('date', 'asc'));
@@ -86,10 +83,10 @@ export default function AdminDashboard() {
     }
   }, [user, isUserLoading, router]);
 
-  const canViewRecords = isMasterAdmin || authorityLevel >= 2;
-  const canUseIA = isMasterAdmin || authorityLevel >= 4; 
-  const canViewManagement = isMasterAdmin || authorityLevel >= 3;
-  const canViewFinance = isMasterAdmin || authorityLevel >= 3;
+  const canViewRecords = isMasterAdmin || authorityLevel === 2 || authorityLevel === 3 || authorityLevel === 4;
+  const canUseIA = isMasterAdmin || authorityLevel === 4; 
+  const canViewManagement = isMasterAdmin || authorityLevel === 3;
+  const canViewFinance = isMasterAdmin || authorityLevel === 3;
 
   const handleLogout = async () => {
     if (!auth) return;
@@ -114,22 +111,6 @@ export default function AdminDashboard() {
         authorityLevel: newLevel,
         updatedAt: new Date().toISOString()
       });
-
-      const profRoleRef = doc(db, 'app_roles', 'professional', 'users', targetUser.id);
-      const adminRoleRef = doc(db, 'app_roles', 'admin', 'users', targetUser.id);
-
-      if (newLevel >= 1) {
-        await setDoc(profRoleRef, { active: true, assignedAt: new Date().toISOString() });
-      } else {
-        await deleteDoc(profRoleRef);
-      }
-
-      if (newLevel >= 3) {
-        await setDoc(adminRoleRef, { active: true, assignedAt: new Date().toISOString() });
-      } else {
-        await deleteDoc(adminRoleRef);
-      }
-
       toast({ title: "Autoridade Atualizada", description: `${targetUser.name} agora é Nível ${newLevel}.` });
     } catch (error) {
       toast({ variant: "destructive", title: "Erro ao atualizar privilégios" });
@@ -180,7 +161,7 @@ export default function AdminDashboard() {
     }
   };
 
-  if (isUserLoading) return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (isUserLoading || isLoadingUserData) return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!user) return null;
 
   if (!isAuthorized) {
@@ -188,7 +169,7 @@ export default function AdminDashboard() {
       <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center space-y-4">
         <ShieldAlert className="h-16 w-16 text-destructive" />
         <h1 className="text-2xl font-bold">Acesso Restrito</h1>
-        <p className="text-muted-foreground">Esta área é exclusiva para profissionais autorizados pela clínica.</p>
+        <p className="text-muted-foreground">Esta área é exclusiva para colaboradores autorizados.</p>
         <Button onClick={handleLogout}>Voltar</Button>
       </div>
     );
@@ -206,10 +187,10 @@ export default function AdminDashboard() {
           </Avatar>
           <div>
             <h1 className="text-4xl font-headline font-bold text-primary tracking-tight">
-              Portal {isMasterAdmin ? 'Administrador' : `Colaborador (Nível ${authorityLevel})`}
+              Portal Administrador
             </h1>
             <p className="text-muted-foreground flex items-center gap-2 font-medium">
-              {isMasterAdmin ? <Shield className="h-4 w-4 text-primary" /> : <UserCog className="h-4 w-4" />} {user.email}
+              {isMasterAdmin ? <Shield className="h-4 w-4 text-primary" /> : <UserCog className="h-4 w-4" />} {user.email} (Nível {authorityLevel})
             </p>
           </div>
         </div>
@@ -228,7 +209,7 @@ export default function AdminDashboard() {
         
         <TabsContent value="appointments">
           <Card className="border-none shadow-2xl bg-card rounded-[2rem] overflow-hidden">
-            <CardHeader className="bg-muted/20 border-b"><CardTitle>Atendimentos Sincronizados</CardTitle></CardHeader>
+            <CardHeader className="bg-muted/20 border-b"><CardTitle>Atendimentos da Clínica</CardTitle></CardHeader>
             <CardContent className="p-0">
               {isLoadingAppts ? (
                 <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary" /></div>
@@ -285,7 +266,7 @@ export default function AdminDashboard() {
             <Card className="border-none shadow-2xl rounded-[2rem]">
               <CardHeader>
                 <CardTitle className="flex items-center gap-3 text-2xl"><Users className="h-6 w-6 text-primary" /> Gestão de Colaboradores</CardTitle>
-                <CardDescription>Defina o nível de acesso para cada profissional da clínica.</CardDescription>
+                <CardDescription>Defina o nível de acesso para cada profissional.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -301,7 +282,7 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                       <div className="space-y-2 pt-2 border-t">
-                        <p className="text-[10px] font-black uppercase text-muted-foreground">Nível de Autoridade</p>
+                        <p className="text-[10px] font-black uppercase text-muted-foreground">Privilégio</p>
                         <Select 
                           defaultValue={u.authorityLevel?.toString() || "0"} 
                           onValueChange={(val) => handleToggleProfessional(u, val)}
@@ -312,10 +293,10 @@ export default function AdminDashboard() {
                           </SelectTrigger>
                           <SelectContent className="rounded-xl">
                             <SelectItem value="0">Paciente</SelectItem>
-                            <SelectItem value="1">Nível 1 - Recepção</SelectItem>
-                            <SelectItem value="2">Nível 2 - Auxiliar</SelectItem>
-                            <SelectItem value="3">Nível 3 - Administrativo</SelectItem>
-                            <SelectItem value="4">Nível 4 - Dentista</SelectItem>
+                            <SelectItem value="1">Nível 1 - Recepção (Agenda)</SelectItem>
+                            <SelectItem value="2">Nível 2 - Auxiliar (Agenda + Prontuário)</SelectItem>
+                            <SelectItem value="3">Nível 3 - Administrativo (Total)</SelectItem>
+                            <SelectItem value="4">Nível 4 - Dentista (Agenda + Prontuário + IA)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -428,7 +409,7 @@ export default function AdminDashboard() {
                     <CardContent className="p-10 flex flex-col items-center justify-center flex-1">
                       <div className="text-center space-y-4 max-w-sm opacity-30">
                         <Activity className="h-20 w-20 mx-auto text-muted-foreground" />
-                        <p className="text-lg font-bold">Histórico clínico em sincronia com o banco de dados.</p>
+                        <p className="text-lg font-bold">Histórico clínico em sincronia.</p>
                       </div>
                     </CardContent>
                   </div>
@@ -443,59 +424,6 @@ export default function AdminDashboard() {
           </TabsContent>
         )}
       </Tabs>
-
-      <Dialog open={!!reschedulingAppointment} onOpenChange={(open) => !open && setReschedulingAppointment(null)}>
-        <DialogContent className="sm:max-w-xl rounded-[3rem] p-10">
-          <DialogHeader className="items-center text-center">
-            <DialogTitle className="text-3xl font-headline">Reagendar Horário</DialogTitle>
-            <DialogDescription className="font-bold text-primary">Ajustando agenda de {reschedulingAppointment?.patientName}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-8 py-6">
-            <div className="flex flex-wrap justify-center gap-4">
-              {availableDates.map((date) => {
-                const isSelected = newDate?.toDateString() === date.toDateString();
-                return (
-                  <Button
-                    key={date.toISOString()}
-                    variant={isSelected ? "default" : "outline"}
-                    className={`h-24 w-20 rounded-[2rem] flex flex-col gap-1 transition-all ${isSelected ? 'scale-110 shadow-xl ring-4 ring-primary/20' : ''}`}
-                    onClick={() => {
-                      setNewDate(date);
-                      setNewTime("");
-                    }}
-                  >
-                    <span className="text-[10px] uppercase font-bold opacity-50">{format(date, "EEE", { locale: ptBR })}</span>
-                    <span className="text-2xl font-black">{format(date, "dd")}</span>
-                    <span className="text-[10px] font-medium uppercase opacity-50">{format(date, "MMM", { locale: ptBR })}</span>
-                  </Button>
-                );
-              })}
-            </div>
-            {newDate && (
-              <div className="grid grid-cols-4 gap-3">
-                {TIME_SLOTS.map(t => (
-                  <Button key={t} variant={newTime === t ? "default" : "outline"} className={`h-12 rounded-xl text-xs font-bold ${newTime === t ? 'shadow-lg scale-105' : ''}`} onClick={() => setNewTime(t)}>
-                    {t}
-                  </Button>
-                ))}
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button className="rounded-full w-full h-14 text-lg font-bold" disabled={!newDate || !newTime} onClick={async () => {
-              if (db && reschedulingAppointment && newDate && newTime) {
-                await updateDoc(doc(db, 'appointments', reschedulingAppointment.id), {
-                  date: format(newDate, 'yyyy-MM-dd'),
-                  time: newTime,
-                  status: 'pending'
-                });
-                toast({ title: "Horário Reagendado" });
-                setReschedulingAppointment(null);
-              }
-            }}>Confirmar Mudança</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -3,7 +3,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Função Master Admin: Prioridade absoluta e imediata
+    // Função Master Admin: Prioridade absoluta baseada no e-mail blindado
     function isMasterAdmin() {
       return request.auth != null && request.auth.token.email == "luizhenrique8759@gmail.com";
     }
@@ -12,22 +12,13 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Verifica nível de autoridade no documento do usuário
-    function hasAuthority(level) {
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-      return userDoc.get('authorityLevel', 0) >= level;
+    // Verifica nível de autoridade buscando o documento do usuário
+    // Usamos get() de forma segura
+    function getAuthority() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('authorityLevel', 0);
     }
 
-    // Verifica se é profissional (Nível 1+)
-    function isProfessional() {
-      return isSignedIn() && (
-        isMasterAdmin() || 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'patient') in ['professional', 'admin']
-      );
-    }
-
-    // Regra Global de Emergência para o Administrador Master
-    // Isso garante acesso total antes de qualquer outra regra ser avaliada
+    // Regra Global Master: Se for o admin mestre, permite tudo imediatamente
     match /{document=**} {
       allow read, write: if isMasterAdmin();
     }
@@ -35,42 +26,36 @@ service cloud.firestore {
     // Coleção de Usuários
     match /users/{userId} {
       allow get: if isSignedIn();
-      allow list: if isMasterAdmin() || (isProfessional() && hasAuthority(3));
+      allow list: if isMasterAdmin() || (isSignedIn() && getAuthority() >= 3);
       allow create: if isSignedIn() && request.auth.uid == userId;
       allow update: if isMasterAdmin() || (isSignedIn() && request.auth.uid == userId);
     }
 
-    // Prontuários Médicos: Nível 2+ ou Master Admin
-    match /medical_records/{recordId} {
-      allow read, write: if isMasterAdmin() || (isProfessional() && hasAuthority(2));
-    }
-
-    // Agendamentos: Separação clara de Admin e Paciente
-    match /appointments/{id} { 
-      // Permissão para Administradores e Recepção listar tudo
-      allow list: if isMasterAdmin() || (isProfessional() && hasAuthority(1));
+    // Agendamentos
+    match /appointments/{apptId} { 
+      // Permite listagem global para profissionais Nível 1+ ou Admin
+      allow list: if isMasterAdmin() || (isSignedIn() && getAuthority() >= 1);
       
-      // Permissão para Paciente listar apenas seus agendamentos
-      // Nota: O paciente DEVE usar um filtro .where('patientId', '==', uid) na query
+      // Permite listagem filtrada para pacientes (deve usar where 'patientId' == uid)
       allow list: if isSignedIn() && resource.data.patientId == request.auth.uid;
       
       allow get: if isSignedIn() && (
         isMasterAdmin() || 
-        (isProfessional() && hasAuthority(1)) || 
+        getAuthority() >= 1 || 
         resource.data.patientId == request.auth.uid
       );
       
       allow create: if isSignedIn();
-      allow update, delete: if isMasterAdmin() || (isProfessional() && hasAuthority(1));
+      allow update, delete: if isMasterAdmin() || (isSignedIn() && getAuthority() >= 1);
+    }
+
+    // Prontuários Médicos: Nível 2 ou 4 (Clínico) ou Nível 3 (Admin)
+    match /medical_records/{recordId} {
+      allow read, write: if isMasterAdmin() || (isSignedIn() && (getAuthority() >= 2 || getAuthority() == 4));
     }
 
     // Coleções Auxiliares
-    match /app_roles/{role}/users/{userId} {
-      allow read: if isSignedIn();
-      allow write: if isMasterAdmin(); 
-    }
-    
     match /services/{id} { allow read: if true; allow write: if isMasterAdmin(); }
-    match /professionals/{id} { allow read: if true; allow write: if isMasterAdmin(); }
+    match /app_roles/{document=**} { allow read, write: if isMasterAdmin(); }
   }
 }
