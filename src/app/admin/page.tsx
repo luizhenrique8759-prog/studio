@@ -415,7 +415,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="p-4 md:p-8 space-y-8 bg-background min-h-screen">
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+      <header className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Avatar className="h-14 w-14 border-2 border-primary">
             <AvatarImage src={user.photoURL || undefined} />
