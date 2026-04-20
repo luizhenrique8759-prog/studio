@@ -63,7 +63,10 @@ export default function AdminDashboard() {
   const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
   const masterEmails = ["luizhenrique8759@gmail.com", "luiz87596531@gmail.com"];
-  const isMaster = useMemo(() => user?.email && masterEmails.includes(user.email), [user]);
+  const isMaster = useMemo(() => {
+    if (!user?.email) return false;
+    return masterEmails.includes(user.email.toLowerCase().trim());
+  }, [user]);
   
   const authorityLevel = useMemo(() => {
     if (isMaster) return 3;
@@ -84,7 +87,6 @@ export default function AdminDashboard() {
   
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
 
-  // Filtro de Pacientes
   const patients = useMemo(() => {
     if (!allUsers) return [];
     return allUsers.filter(u => u.role === 'patient');
@@ -96,12 +98,6 @@ export default function AdminDashboard() {
       p.email?.toLowerCase().includes(patientSearch.toLowerCase())
     );
   }, [patients, patientSearch]);
-
-  // Filtro de Equipe (Staff)
-  const staffMembers = useMemo(() => {
-    if (!allUsers) return [];
-    return allUsers.filter(u => u.role !== 'patient' || u.authorityLevel > 0);
-  }, [allUsers]);
 
   const filteredStaff = useMemo(() => {
     return allUsers?.filter(u => 
@@ -121,14 +117,19 @@ export default function AdminDashboard() {
     return patients.find(p => p.id === selectedPatientId);
   }, [patients, selectedPatientId]);
 
+  // Bloqueio explícito de consulta se não houver autoridade ou paciente selecionado
+  const canSeeRecords = useMemo(() => {
+    return isMaster || authorityLevel >= 2;
+  }, [isMaster, authorityLevel]);
+
   const recordsQuery = useMemoFirebase(() => {
-    if (!db || !selectedPatientId || authorityLevel < 2) return null;
+    if (!db || !selectedPatientId || !canSeeRecords) return null;
     return query(
       collection(db, 'medical_records'), 
       where('patientUserId', '==', selectedPatientId), 
       orderBy('createdAt', 'desc')
     );
-  }, [db, selectedPatientId, authorityLevel]);
+  }, [db, selectedPatientId, canSeeRecords]);
 
   const { data: medicalRecords, isLoading: isLoadingRecords } = useCollection(recordsQuery);
 
@@ -316,11 +317,10 @@ export default function AdminDashboard() {
         <TabsList className="bg-muted/50 mb-6 h-auto p-1 rounded-xl flex-wrap justify-start">
           <TabsTrigger value="appointments" className="rounded-lg font-bold">Agenda</TabsTrigger>
           <TabsTrigger value="patients" className="rounded-lg font-bold">Pacientes</TabsTrigger>
-          {authorityLevel >= 2 && <TabsTrigger value="records" className="rounded-lg font-bold">Prontuários</TabsTrigger>}
+          {canSeeRecords && <TabsTrigger value="records" className="rounded-lg font-bold">Prontuários</TabsTrigger>}
           {authorityLevel >= 3 && <TabsTrigger value="management" className="rounded-lg font-bold">Equipe</TabsTrigger>}
         </TabsList>
 
-        {/* AGENDA */}
         <TabsContent value="appointments">
           <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
             <CardHeader className="bg-muted/5 border-b">
@@ -360,7 +360,6 @@ export default function AdminDashboard() {
           </Card>
         </TabsContent>
 
-        {/* PACIENTES */}
         <TabsContent value="patients">
           <div className="space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -424,7 +423,6 @@ export default function AdminDashboard() {
           </div>
         </TabsContent>
 
-        {/* PRONTUÁRIOS */}
         <TabsContent value="records">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Card className="lg:col-span-1 rounded-3xl border-none shadow-lg h-fit">
@@ -495,18 +493,22 @@ export default function AdminDashboard() {
 
                   <div className="space-y-4">
                     <h3 className="text-lg font-bold flex items-center gap-2">Histórico</h3>
-                    {medicalRecords?.map((record) => (
-                      <Card key={record.id} className="rounded-2xl border-none shadow-sm">
-                        <CardHeader className="py-3 px-6 bg-muted/20 border-b flex flex-row justify-between">
-                          <span className="text-xs font-bold text-primary">{new Date(record.createdAt).toLocaleDateString('pt-BR')}</span>
-                          <Badge variant="outline" className="text-[10px] uppercase">{record.riskLevel}</Badge>
-                        </CardHeader>
-                        <CardContent className="p-6">
-                          <p className="text-sm italic">"{record.notes}"</p>
-                          {record.aiSummary && <p className="text-xs mt-3 pt-3 border-t text-muted-foreground">{record.aiSummary}</p>}
-                        </CardContent>
-                      </Card>
-                    ))}
+                    {isLoadingRecords ? (
+                      <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>
+                    ) : (
+                      medicalRecords?.map((record) => (
+                        <Card key={record.id} className="rounded-2xl border-none shadow-sm">
+                          <CardHeader className="py-3 px-6 bg-muted/20 border-b flex flex-row justify-between">
+                            <span className="text-xs font-bold text-primary">{new Date(record.createdAt).toLocaleDateString('pt-BR')}</span>
+                            <Badge variant="outline" className="text-[10px] uppercase">{record.riskLevel}</Badge>
+                          </CardHeader>
+                          <CardContent className="p-6">
+                            <p className="text-sm italic">"{record.notes}"</p>
+                            {record.aiSummary && <p className="text-xs mt-3 pt-3 border-t text-muted-foreground">{record.aiSummary}</p>}
+                          </CardContent>
+                        </Card>
+                      ))
+                    )}
                   </div>
                 </>
               ) : (
@@ -519,7 +521,6 @@ export default function AdminDashboard() {
           </div>
         </TabsContent>
 
-        {/* EQUIPE (STAFF) */}
         <TabsContent value="management">
           <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
             <CardHeader className="bg-muted/5 border-b flex flex-row justify-between items-center">
@@ -563,7 +564,7 @@ export default function AdminDashboard() {
                           className="border rounded-lg p-1 text-xs bg-white h-8" 
                           value={u.authorityLevel || 0} 
                           onChange={(e) => handleUpdateLevel(u, e.target.value)}
-                          disabled={authorityLevel < 3 || masterEmails.includes(u.email)}
+                          disabled={authorityLevel < 3 || masterEmails.includes(u.email?.toLowerCase())}
                         >
                           {roleNames.map((name, i) => <option key={i} value={i}>{name}</option>)}
                         </select>

@@ -7,7 +7,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Verificação prioritária de administradores mestres por e-mail (Bypass absoluto)
+    // Verificação de administradores mestres por e-mail (Bypass absoluto)
     function isMasterAdmin() {
       return isSignedIn() && (
         request.auth.token.email == "luizhenrique8759@gmail.com" || 
@@ -45,7 +45,9 @@ service cloud.firestore {
 
     // Prontuários: Acesso para Nível 2+ ou Master Admin
     match /medical_records/{recordId} {
-      allow read, write: if isMasterAdmin() || (isStaff() && (isAdmin() || getAuthority() >= 2));
+      // Regra explícita para leitura e escrita
+      allow read, write: if isMasterAdmin();
+      allow read, write: if isStaff() && (isAdmin() || getAuthority() >= 2);
     }
 
     match /services/{id} { 
