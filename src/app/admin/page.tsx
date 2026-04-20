@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +13,7 @@ import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc,
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { collection, doc, updateDoc, query, orderBy, where, deleteDoc, setDoc } from 'firebase/firestore';
+import { collection, doc, updateDoc, query, orderBy, where, deleteDoc, setDoc, limit } from 'firebase/firestore';
 import Link from 'next/link';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -51,7 +51,7 @@ export default function AdminDashboard() {
   const [newRescheduleDate, setNewRescheduleDate] = useState("");
   const [newRescheduleTime, setNewRescheduleTime] = useState("");
 
-  const masterEmails = ["luizhenrique8759@gmail.com", "luiz88955548@gmail.com"];
+  const masterEmails = useMemo(() => ["luizhenrique8759@gmail.com", "luiz88955548@gmail.com"], []);
 
   useEffect(() => {
     const handleError = (error: any) => {
@@ -67,15 +67,15 @@ export default function AdminDashboard() {
     return () => errorEmitter.off('permission-error', handleError);
   }, []);
 
-  const formatDate = (dateStr: string | undefined) => {
+  const formatDate = useCallback((dateStr: string | undefined) => {
     if (!dateStr) return '-';
     const parts = dateStr.split('-');
     if (parts.length !== 3) return dateStr;
     const [year, month, day] = parts;
     return `${day}/${month}/${year}`;
-  };
+  }, []);
 
-  const calculateAge = (birthDateString: string | undefined) => {
+  const calculateAge = useCallback((birthDateString: string | undefined) => {
     if (!birthDateString) return null;
     try {
       const parts = birthDateString.split('-');
@@ -88,7 +88,7 @@ export default function AdminDashboard() {
       if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
       return age;
     } catch (e) { return null; }
-  };
+  }, []);
 
   const userDocRef = useMemoFirebase(() => {
     if (!user || !db) return null;
@@ -100,19 +100,19 @@ export default function AdminDashboard() {
     if (!user?.email) return false;
     const userEmail = user.email.toLowerCase().trim();
     return masterEmails.some(email => email.toLowerCase() === userEmail);
-  }, [user]);
+  }, [user, masterEmails]);
   
   const authorityLevel = useMemo(() => isMaster ? 4 : (userData?.authorityLevel ?? 0), [userData, isMaster]);
   const isAuthorized = useMemo(() => isMaster || (authorityLevel >= 1), [authorityLevel, isMaster]);
 
   const usersRef = useMemoFirebase(() => {
     if (!db || !isAuthorized) return null;
-    return query(collection(db, 'users'), orderBy('name', 'asc'));
+    return query(collection(db, 'users'), orderBy('name', 'asc'), limit(100));
   }, [db, isAuthorized]);
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
 
   const patients = useMemo(() => allUsers?.filter(u => u.role === 'patient' || (!u.role && !u.authorityLevel)) || [], [allUsers]);
-  const staffMembers = useMemo(() => allUsers?.filter(u => (u.authorityLevel && u.authorityLevel > 0) || u.role !== 'patient') || [], [allUsers]);
+  const staffMembers = useMemo(() => allUsers?.filter(u => (u.authorityLevel && u.authorityLevel > 0) || (u.role && u.role !== 'patient')) || [], [allUsers]);
 
   const filteredPatients = useMemo(() => patients.filter(p => 
     p.name?.toLowerCase().includes(patientSearch.toLowerCase()) || 
@@ -125,7 +125,7 @@ export default function AdminDashboard() {
 
   const apptsQuery = useMemoFirebase(() => {
     if (!db || !isAuthorized) return null;
-    return query(collection(db, 'appointments'), orderBy('date', 'desc'));
+    return query(collection(db, 'appointments'), orderBy('date', 'desc'), limit(100));
   }, [db, isAuthorized]);
   const { data: appointments, isLoading: isLoadingAppts } = useCollection(apptsQuery);
 
@@ -150,7 +150,7 @@ export default function AdminDashboard() {
 
   const recordsQuery = useMemoFirebase(() => {
     if (!db || !selectedPatientId || !canSeeRecords) return null;
-    return query(collection(db, 'medical_records'), where('patientUserId', '==', selectedPatientId));
+    return query(collection(db, 'medical_records'), where('patientUserId', '==', selectedPatientId), limit(50));
   }, [db, selectedPatientId, canSeeRecords]);
   const { data: medicalRecordsRaw, isLoading: isLoadingRecords } = useCollection(recordsQuery);
 
@@ -336,10 +336,10 @@ export default function AdminDashboard() {
     setRecordPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
+  const roleNames = useMemo(() => ["Pendente/Paciente", "Recepção", "Auxiliar", "Administrativo", "Dentista"], []);
+
   if (isUserLoading || isLoadingUserDoc) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!user || !isAuthorized) return <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center space-y-4"><ShieldAlert className="h-16 w-16 text-destructive" /><h1 className="text-2xl font-bold">Acesso Restrito</h1><Button onClick={handleLogout}>Sair</Button></div>;
-
-  const roleNames = ["Pendente/Paciente", "Recepção", "Auxiliar", "Administrativo", "Dentista"];
 
   return (
     <div className="p-4 md:p-8 space-y-8 bg-background min-h-screen">

@@ -7,6 +7,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // MASTER ADMIN BYPASS: Prioridade absoluta e rápida
     function isMasterAdmin() {
       return isSignedIn() && (
         request.auth.token.email.lower() == "luizhenrique8759@gmail.com" ||
@@ -14,7 +15,6 @@ service cloud.firestore {
       );
     }
 
-    // MASTER ADMIN BYPASS: Permissão total em qualquer documento para administradores mestre
     match /{document=**} {
       allow read, write: if isMasterAdmin();
     }
@@ -25,28 +25,26 @@ service cloud.firestore {
     }
 
     function isStaff() {
-      return isSignedIn() && (isMasterAdmin() || getAuthority() >= 1);
+      return isSignedIn() && getAuthority() >= 1;
     }
 
     function isAdmin() {
-      return isSignedIn() && (isMasterAdmin() || getAuthority() >= 3);
+      return isSignedIn() && getAuthority() >= 3;
     }
 
     function isDentist() {
-      return isSignedIn() && (isMasterAdmin() || getAuthority() >= 4);
+      return isSignedIn() && getAuthority() >= 4;
     }
 
     match /users/{userId} {
-      allow read, write: if isMasterAdmin();
       allow list: if isStaff();
       allow get: if isSignedIn() && (request.auth.uid == userId || isStaff());
       allow create: if isSignedIn();
-      allow delete: if isMasterAdmin() || isStaff(); 
+      allow delete: if isStaff(); 
       allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
     }
 
     match /appointments/{apptId} {
-      allow read, write: if isMasterAdmin();
       allow list, get: if isStaff() || (isSignedIn() && resource.data.patientId == request.auth.uid);
       allow create: if isStaff();
       allow update: if isStaff();
@@ -54,9 +52,8 @@ service cloud.firestore {
     }
 
     match /medical_records/{recordId} {
-      allow read, write: if isMasterAdmin();
       allow list, get, create: if isStaff();
-      allow update, delete: if isMasterAdmin() || isDentist();
+      allow update, delete: if isDentist();
     }
 
     match /services/{id} { 
