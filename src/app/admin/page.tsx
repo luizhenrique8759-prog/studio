@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LogOut, Loader2, ClipboardList, ShieldAlert, Users, CalendarPlus, Bell, Trash2, UserPlus, Search, FileText, Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus, UserMinus, ShieldCheck, Clock, DollarSign, TrendingUp, CreditCard, Activity, Check, X, CalendarDays, Camera, Image as ImageIcon, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -39,7 +39,6 @@ export default function AdminDashboard() {
   const [patientSearch, setPatientSearch] = useState("");
   const [staffSearch, setStaffSearch] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
-  const [editingPatient, setEditingPatient] = useState<any>(null);
   
   // Clinical Record States
   const [clinicalNotes, setClinicalNotes] = useState("");
@@ -51,6 +50,8 @@ export default function AdminDashboard() {
   
   // State for Rescheduling
   const [reschedulingAppt, setReschedulingAppt] = useState<any>(null);
+  const [newRescheduleDate, setNewRescheduleDate] = useState("");
+  const [newRescheduleTime, setNewRescheduleTime] = useState("");
 
   useEffect(() => {
     const handleError = (error: any) => {
@@ -226,67 +227,56 @@ export default function AdminDashboard() {
       });
   };
 
-  const handleRegisterPatient = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleUpdateAppointmentStatus = (apptId: string, newStatus: string) => {
+    if (!db) return;
+    const apptRef = doc(db, 'appointments', apptId);
+    updateDoc(apptRef, { status: newStatus, updatedAt: new Date().toISOString() })
+      .then(() => toast({ title: "Status Atualizado" }))
+      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: apptRef.path, operation: 'update' })));
+  };
+
+  const handleReschedule = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!db || !reschedulingAppt || !newRescheduleDate || !newRescheduleTime) return;
+    const apptRef = doc(db, 'appointments', reschedulingAppt.id);
+    updateDoc(apptRef, { 
+      date: newRescheduleDate, 
+      time: newRescheduleTime, 
+      status: 'pending',
+      updatedAt: new Date().toISOString() 
+    })
+      .then(() => {
+        toast({ title: "Consulta Reagendada" });
+        setReschedulingAppt(null);
+      })
+      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: apptRef.path, operation: 'update' })));
+  };
+
+  const handleRegisterStaff = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!db) return;
-    setIsRegistering(true);
+    setIsRegisteringStaff(true);
     const formData = new FormData(e.currentTarget);
     const name = formData.get('name') as string;
-    const birthDate = formData.get('birthDate') as string;
-    const email = (formData.get('email') as string) || "";
-    const phone = (formData.get('phone') as string) || "";
+    const email = (formData.get('email') as string).toLowerCase().trim();
+    const level = parseInt(formData.get('level') as string);
 
-    const patientRef = doc(collection(db, 'users'));
-    const patientData = {
-      name, birthDate, email, phoneNumber: phone,
-      role: 'patient', authorityLevel: 0,
+    const staffRef = doc(collection(db, 'users'));
+    const staffData = {
+      name, email, 
+      role: level === 1 ? 'reception' : level === 4 ? 'dentist' : 'admin',
+      authorityLevel: level,
+      status: 'pending_login',
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
     };
 
-    setDoc(patientRef, patientData)
+    setDoc(staffRef, staffData)
       .then(() => {
-        const recordRef = doc(collection(db, 'medical_records'));
-        const recordData = {
-          patientUserId: patientRef.id, professionalId: user?.uid,
-          notes: `Ficha clínica iniciada para o paciente ${name}. Nascido em: ${formatDate(birthDate)}.`,
-          treatment: "Avaliação inicial.", riskLevel: "Low", 
-          attendanceDate: new Date().toISOString().split('T')[0],
-          createdAt: new Date().toISOString()
-        };
-        setDoc(recordRef, recordData)
-          .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: recordRef.path, operation: 'create', requestResourceData: recordData })));
-        
-        toast({ title: "Paciente Cadastrado" });
+        toast({ title: "Colaborador Convidado", description: `Aguardando primeiro login de ${email}.` });
         (e.target as HTMLFormElement).reset();
       })
-      .catch((err) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: patientRef.path,
-          operation: 'create',
-          requestResourceData: patientData
-        }));
-      })
-      .finally(() => setIsRegistering(false));
-  };
-
-  const handleAddPhoto = () => {
-    if (!photoUrl) return;
-    setRecordPhotos(prev => [...prev, photoUrl]);
-    setPhotoUrl("");
-  };
-
-  const handleRemovePhoto = (index: number) => {
-    setRecordPhotos(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleGenerateAISummary = async () => {
-    if (!clinicalNotes || !selectedPatient || !canEditRecords) return;
-    setIsGeneratingAI(true);
-    try {
-      const result = await generateClinicalSummary({ patientName: selectedPatient.name, dentistNotes: clinicalNotes });
-      setAiResult(result);
-      toast({ title: "IA: Resumo Gerado" });
-    } catch (error) { toast({ variant: "destructive", title: "Erro na IA" }); } finally { setIsGeneratingAI(false); }
+      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: staffRef.path, operation: 'create', requestResourceData: staffData })))
+      .finally(() => setIsRegisteringStaff(false));
   };
 
   const handleSaveMedicalRecord = (e: React.FormEvent) => {
@@ -314,6 +304,26 @@ export default function AdminDashboard() {
         setRecordPhotos([]);
       })
       .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: recordRef.path, operation: 'create', requestResourceData: recordData })));
+  };
+
+  const handleGenerateAISummary = async () => {
+    if (!clinicalNotes || !selectedPatient || !canEditRecords) return;
+    setIsGeneratingAI(true);
+    try {
+      const result = await generateClinicalSummary({ patientName: selectedPatient.name, dentistNotes: clinicalNotes });
+      setAiResult(result);
+      toast({ title: "IA: Resumo Gerado" });
+    } catch (error) { toast({ variant: "destructive", title: "Erro na IA" }); } finally { setIsGeneratingAI(false); }
+  };
+
+  const handleAddPhoto = () => {
+    if (!photoUrl) return;
+    setRecordPhotos(prev => [...prev, photoUrl]);
+    setPhotoUrl("");
+  };
+
+  const handleRemovePhoto = (index: number) => {
+    setRecordPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
   if (isUserLoading || isLoadingUserDoc) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
@@ -353,9 +363,7 @@ export default function AdminDashboard() {
           {authorityLevel >= 3 && <TabsTrigger value="management" className="rounded-lg font-bold">Equipe & Acessos</TabsTrigger>}
         </TabsList>
 
-        {/* Agenda Content - Reused from previous version */}
         <TabsContent value="appointments">
-           {/* Agenda Table */}
            <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
             <CardHeader className="bg-muted/5 border-b"><CardTitle className="text-xl flex items-center gap-2"><ClipboardList className="h-5 w-5 text-primary" /> Agenda da Clínica</CardTitle></CardHeader>
             <CardContent className="p-0">
@@ -393,7 +401,11 @@ export default function AdminDashboard() {
                                 <X className="h-4 w-4" />
                               </Button>
                             )}
-                            <Button size="icon" variant="outline" className="h-8 w-8 text-primary border-primary/20 hover:bg-primary/5" onClick={() => setReschedulingAppt(apt)}>
+                            <Button size="icon" variant="outline" className="h-8 w-8 text-primary border-primary/20 hover:bg-primary/5" onClick={() => {
+                              setReschedulingAppt(apt);
+                              setNewRescheduleDate(apt.date);
+                              setNewRescheduleTime(apt.time);
+                            }}>
                               <CalendarDays className="h-4 w-4" />
                             </Button>
                           </div>
@@ -405,9 +417,69 @@ export default function AdminDashboard() {
               )}
             </CardContent>
           </Card>
+
+          <Dialog open={!!reschedulingAppt} onOpenChange={() => setReschedulingAppt(null)}>
+            <DialogContent className="rounded-[2rem]">
+              <DialogHeader>
+                <DialogTitle>Reagendar Consulta</DialogTitle>
+                <DialogDescription>Selecione a nova data e horário para {reschedulingAppt?.patientName}.</DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleReschedule} className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Nova Data</Label>
+                  <Input type="date" value={newRescheduleDate} onChange={(e) => setNewRescheduleDate(e.target.value)} required />
+                </div>
+                <div className="space-y-2">
+                  <Label>Novo Horário</Label>
+                  <Select value={newRescheduleTime} onValueChange={setNewRescheduleTime}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {TIME_SLOTS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button type="submit" className="w-full rounded-xl">Confirmar Reagendamento</Button>
+              </form>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
-        {/* Records Content - Updated with Photos and Attendance Date */}
+        <TabsContent value="patients">
+          <div className="space-y-6">
+            <div className="flex justify-between items-center gap-4">
+              <div className="relative w-full max-w-xs"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Filtrar pacientes..." className="pl-10 h-10 rounded-xl" value={patientSearch} onChange={(e) => setPatientSearch(e.target.value)} /></div>
+            </div>
+            <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-6">Nome</TableHead>
+                    <TableHead>Idade</TableHead>
+                    <TableHead>Contato</TableHead>
+                    <TableHead className="text-right pr-6">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredPatients?.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-bold pl-6">{p.name}</TableCell>
+                      <TableCell>{calculateAge(p.birthDate) || '-'} anos</TableCell>
+                      <TableCell className="text-xs">{p.email || p.phoneNumber || 'N/A'}</TableCell>
+                      <TableCell className="text-right pr-6">
+                        <div className="flex justify-end gap-2">
+                          <Button variant="outline" size="icon" className="h-8 w-8 text-destructive border-destructive/20" onClick={() => handleDeletePatient(p)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
+          </div>
+        </TabsContent>
+
         <TabsContent value="records">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Card className="lg:col-span-1 rounded-3xl border-none shadow-lg h-fit">
@@ -447,7 +519,6 @@ export default function AdminDashboard() {
             <div className="lg:col-span-2 space-y-6">
               {selectedPatient ? (
                 <>
-                  {/* Patient Quick Info */}
                   <Card className="rounded-3xl border-none shadow-sm bg-primary/5">
                     <CardContent className="p-6 flex flex-wrap gap-4 items-center justify-between">
                       <div className="flex items-center gap-4">
@@ -466,7 +537,6 @@ export default function AdminDashboard() {
                     </CardContent>
                   </Card>
 
-                  {/* New Evolution Record */}
                   <Card className={`rounded-3xl border-none shadow-xl ${canEditRecords ? 'bg-white' : 'bg-muted/30 opacity-80'}`}>
                     <CardHeader className="flex flex-row justify-between items-center">
                       <CardTitle className="text-xl font-black text-primary flex items-center gap-2">
@@ -563,7 +633,6 @@ export default function AdminDashboard() {
                     </CardContent>
                   </Card>
 
-                  {/* Record History */}
                   <div className="space-y-4">
                     <h3 className="text-lg font-bold flex items-center gap-2">
                       <Clock className="h-5 w-5 text-primary" /> Histórico Clínico
@@ -605,12 +674,6 @@ export default function AdminDashboard() {
                             </CardContent>
                           </Card>
                         ))}
-                        {medicalRecords?.length === 0 && (
-                          <div className="text-center p-12 border-2 border-dashed rounded-[2rem] text-muted-foreground">
-                            <ImageIcon className="h-12 w-12 mx-auto mb-2 opacity-20" />
-                            Nenhum registro anterior encontrado.
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
@@ -659,7 +722,6 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
           </div>
-          {/* Detailed Financial List */}
           <Card className="rounded-3xl border-none shadow-xl overflow-hidden">
             <CardHeader className="border-b bg-muted/5"><CardTitle className="text-lg">Extrato de Serviços</CardTitle></CardHeader>
             <CardContent className="p-0">
@@ -685,7 +747,6 @@ export default function AdminDashboard() {
         </TabsContent>
 
         <TabsContent value="management">
-           {/* Team Management - Reused from previous version */}
            <div className="space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div className="relative w-full max-w-xs"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Buscar na equipe..." className="pl-10 h-10 rounded-xl" value={staffSearch} onChange={(e) => setStaffSearch(e.target.value)} /></div>
