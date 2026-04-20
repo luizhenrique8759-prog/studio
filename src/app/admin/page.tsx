@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, ShieldAlert, Trash2, Search, Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus, UserMinus, ShieldCheck, Clock, Activity, Check, X, CalendarDays, Plus, TrendingUp, CalendarPlus, Bell } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, ShieldAlert, Trash2, Search, Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus, UserMinus, ShieldCheck, Clock, Activity, Check, X, CalendarDays, Plus, TrendingUp, CalendarPlus, Bell, DollarSign, CreditCard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { signOut } from 'firebase/auth';
@@ -134,10 +134,10 @@ export default function AdminDashboard() {
     return appointments.reduce((acc, appt) => {
       const service = SERVICES.find(s => s.name === appt.serviceName);
       const price = service?.price || 0;
-      if (appt.status === 'confirmed') {
+      if (appt.paymentStatus === 'paid') {
         acc.total += price;
         acc.count += 1;
-      } else if (appt.status === 'pending') {
+      } else if (appt.status === 'confirmed') {
         acc.pending += price;
       }
       return acc;
@@ -243,6 +243,26 @@ export default function AdminDashboard() {
     updateDoc(apptRef, { status: newStatus, updatedAt: new Date().toISOString() })
       .then(() => toast({ title: "Status Atualizado" }))
       .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: apptRef.path, operation: 'update' })));
+  };
+
+  const handleUpdatePaymentStatus = (apptId: string, paid: boolean) => {
+    if (!db) return;
+    const apptRef = doc(db, 'appointments', apptId);
+    updateDoc(apptRef, { 
+      paymentStatus: paid ? 'paid' : 'unpaid', 
+      updatedAt: new Date().toISOString() 
+    })
+      .then(() => toast({ title: paid ? "Pagamento Confirmado" : "Pagamento Estornado" }))
+      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: apptRef.path, operation: 'update' })));
+  };
+
+  const handleDeleteAppointment = (apptId: string) => {
+    if (!db || !isAuthorized) return;
+    if (!confirm("Tem certeza que deseja excluir permanentemente esta consulta cancelada?")) return;
+    const apptRef = doc(db, 'appointments', apptId);
+    deleteDoc(apptRef)
+      .then(() => toast({ title: "Consulta Removida" }))
+      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: apptRef.path, operation: 'delete' })));
   };
 
   const handleReschedule = (e: React.FormEvent) => {
@@ -395,23 +415,39 @@ export default function AdminDashboard() {
                         <TableCell>{apt.serviceName}</TableCell>
                         <TableCell className="text-primary font-medium">{formatDate(apt.date)} às {apt.time}</TableCell>
                         <TableCell>
-                          <Badge variant={apt.status === 'confirmed' ? 'secondary' : apt.status === 'cancelled' ? 'destructive' : 'outline'}>
-                            {apt.status === 'confirmed' ? 'Confirmado' : apt.status === 'cancelled' ? 'Cancelado' : 'Pendente'}
-                          </Badge>
+                          <div className="flex flex-col gap-1">
+                            <Badge variant={apt.status === 'confirmed' ? 'secondary' : apt.status === 'cancelled' ? 'destructive' : 'outline'} className="w-fit">
+                              {apt.status === 'confirmed' ? 'Confirmado' : apt.status === 'cancelled' ? 'Cancelado' : 'Pendente'}
+                            </Badge>
+                            {apt.status === 'confirmed' && (
+                              <Badge variant={apt.paymentStatus === 'paid' ? 'default' : 'outline'} className={`w-fit text-[10px] ${apt.paymentStatus === 'paid' ? 'bg-green-600' : 'text-orange-600 border-orange-200'}`}>
+                                {apt.paymentStatus === 'paid' ? 'Pago' : 'Aguardando Pagamento'}
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-right pr-6">
                           <div className="flex items-center justify-end gap-2">
                             {apt.status === 'pending' && (
-                              <Button size="icon" variant="outline" className="h-8 w-8 text-green-600 border-green-200 hover:bg-green-50" onClick={() => handleUpdateAppointmentStatus(apt.id, 'confirmed')}>
+                              <Button size="icon" title="Confirmar Consulta" variant="outline" className="h-8 w-8 text-green-600 border-green-200 hover:bg-green-50" onClick={() => handleUpdateAppointmentStatus(apt.id, 'confirmed')}>
                                 <Check className="h-4 w-4" />
                               </Button>
                             )}
-                            {apt.status !== 'cancelled' && (
-                              <Button size="icon" variant="outline" className="h-8 w-8 text-destructive border-destructive/20 hover:bg-destructive/5" onClick={() => handleUpdateAppointmentStatus(apt.id, 'cancelled')}>
-                                <X className="h-4 w-4" />
+                            {apt.status === 'confirmed' && apt.paymentStatus !== 'paid' && (
+                              <Button size="icon" title="Confirmar Pagamento" variant="outline" className="h-8 w-8 text-green-600 border-green-200 hover:bg-green-50" onClick={() => handleUpdatePaymentStatus(apt.id, true)}>
+                                <DollarSign className="h-4 w-4" />
                               </Button>
                             )}
-                            <Button size="icon" variant="outline" className="h-8 w-8 text-primary border-primary/20 hover:bg-primary/5" onClick={() => {
+                            {apt.status !== 'cancelled' ? (
+                              <Button size="icon" title="Cancelar Consulta" variant="outline" className="h-8 w-8 text-destructive border-destructive/20 hover:bg-destructive/5" onClick={() => handleUpdateAppointmentStatus(apt.id, 'cancelled')}>
+                                <X className="h-4 w-4" />
+                              </Button>
+                            ) : (
+                              <Button size="icon" title="Excluir Registro" variant="outline" className="h-8 w-8 text-destructive border-destructive/20 hover:bg-destructive/5" onClick={() => handleDeleteAppointment(apt.id)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                            <Button size="icon" title="Reagendar" variant="outline" className="h-8 w-8 text-primary border-primary/20 hover:bg-primary/5" onClick={() => {
                               setReschedulingAppt(apt);
                               setNewRescheduleDate(apt.date);
                               setNewRescheduleTime(apt.time);
@@ -707,22 +743,22 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <Card className="rounded-3xl border-none shadow-lg bg-primary text-white">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Faturamento Total</CardTitle>
+                <CardTitle className="text-sm font-medium">Faturamento Confirmado (Pago)</CardTitle>
                 <TrendingUp className="h-4 w-4 opacity-70" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-black">R$ {financialStats.total.toLocaleString('pt-BR')}</div>
-                <p className="text-[10px] opacity-70 mt-1">{financialStats.count} atendimentos confirmados</p>
+                <p className="text-[10px] opacity-70 mt-1">{financialStats.count} atendimentos pagos</p>
               </CardContent>
             </Card>
             <Card className="rounded-3xl border-none shadow-lg">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Previsão Pendente</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Previsão em Aberto</CardTitle>
                 <Clock className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-black text-primary">R$ {financialStats.pending.toLocaleString('pt-BR')}</div>
-                <p className="text-[10px] text-muted-foreground mt-1">Valor de consultas aguardando confirmação</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Valor de consultas confirmadas aguardando pagamento</p>
               </CardContent>
             </Card>
             <Card className="rounded-3xl border-none shadow-lg">
@@ -740,7 +776,7 @@ export default function AdminDashboard() {
             <CardHeader className="border-b bg-muted/5"><CardTitle className="text-lg">Extrato de Serviços</CardTitle></CardHeader>
             <CardContent className="p-0">
                <Table>
-                 <TableHeader><TableRow><TableHead className="pl-6">Data</TableHead><TableHead>Paciente</TableHead><TableHead>Serviço</TableHead><TableHead>Valor</TableHead><TableHead className="text-right pr-6">Status</TableHead></TableRow></TableHeader>
+                 <TableHeader><TableRow><TableHead className="pl-6">Data</TableHead><TableHead>Paciente</TableHead><TableHead>Serviço</TableHead><TableHead>Valor</TableHead><TableHead className="text-right pr-6">Status Financeiro</TableHead></TableRow></TableHeader>
                  <TableBody>
                    {appointments?.slice(0, 10).map((appt) => {
                      const service = SERVICES.find(s => s.name === appt.serviceName);
@@ -750,7 +786,11 @@ export default function AdminDashboard() {
                          <TableCell className="font-bold">{appt.patientName}</TableCell>
                          <TableCell className="text-xs">{appt.serviceName}</TableCell>
                          <TableCell className="font-medium">R$ {service?.price || 0}</TableCell>
-                         <TableCell className="text-right pr-6"><Badge variant={appt.status === 'confirmed' ? 'default' : appt.status === 'cancelled' ? 'destructive' : 'outline'}>{appt.status === 'confirmed' ? 'Pago' : appt.status === 'cancelled' ? 'Cancelado' : 'Pendente'}</Badge></TableCell>
+                         <TableCell className="text-right pr-6">
+                           <Badge variant={appt.paymentStatus === 'paid' ? 'default' : appt.status === 'cancelled' ? 'destructive' : 'outline'}>
+                            {appt.paymentStatus === 'paid' ? 'Pago' : appt.status === 'cancelled' ? 'Cancelado' : 'Aguardando'}
+                           </Badge>
+                         </TableCell>
                        </TableRow>
                      );
                    })}
