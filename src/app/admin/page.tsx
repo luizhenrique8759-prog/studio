@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -183,6 +182,16 @@ export default function AdminDashboard() {
         .then(() => toast({ title: "Acesso Revogado" }))
         .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: userRef.path, operation: 'update', requestResourceData: updateData })));
     }
+  };
+
+  const handleDeletePatient = (patient: any) => {
+    if (!db || authorityLevel < 3) return;
+    if (!confirm(`Tem certeza que deseja excluir permanentemente o cadastro de ${patient.name}? Esta ação não poderá ser desfeita.`)) return;
+
+    const userRef = doc(db, 'users', patient.id);
+    deleteDoc(userRef)
+      .then(() => toast({ title: "Cadastro Excluído", description: "O paciente foi removido do sistema." }))
+      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: userRef.path, operation: 'delete' })));
   };
 
   const handleRegisterPatient = (e: React.FormEvent<HTMLFormElement>) => {
@@ -381,14 +390,22 @@ export default function AdminDashboard() {
               <Table><TableHeader><TableRow><TableHead className="pl-6">Nome</TableHead><TableHead>Idade</TableHead><TableHead>Nascimento</TableHead><TableHead>Contato</TableHead><TableHead className="text-right pr-6">Ações</TableHead></TableRow></TableHeader>
                 <TableBody>{filteredPatients?.map((p) => (
                   <TableRow key={p.id}><TableCell className="font-bold pl-6">{p.name}</TableCell><TableCell>{calculateAge(p.birthDate) ?? '-'}</TableCell><TableCell className="text-xs">{formatDate(p.birthDate)}</TableCell><TableCell className="text-xs">{p.email || p.phoneNumber || '-'}</TableCell><TableCell className="text-right pr-6">
-                    <Dialog open={editingPatient?.id === p.id} onOpenChange={(open) => !open && setEditingPatient(null)}>
-                      <DialogTrigger asChild><Button variant="ghost" size="icon" onClick={() => setEditingPatient(p)}><Edit2 className="h-3 w-3" /></Button></DialogTrigger>
-                      <DialogContent className="sm:max-w-[425px] rounded-[2rem]"><DialogHeader><DialogTitle>Editar</DialogTitle></DialogHeader>
-                        <form onSubmit={handleEditPatient} className="space-y-4 py-4">
-                          <Input name="name" defaultValue={p.name} required className="mb-2" /><Input name="email" type="email" defaultValue={p.email} className="mb-2" /><Input name="birthDate" type="date" defaultValue={p.birthDate} required className="mb-2" /><Input name="phone" defaultValue={p.phoneNumber} className="mb-4" />
-                          <Button type="submit" disabled={isUpdatingPatient} className="w-full">Salvar</Button>
-                        </form>
-                      </DialogContent></Dialog>
+                    <div className="flex items-center justify-end gap-2">
+                      <Dialog open={editingPatient?.id === p.id} onOpenChange={(open) => !open && setEditingPatient(null)}>
+                        <DialogTrigger asChild><Button variant="ghost" size="icon" onClick={() => setEditingPatient(p)}><Edit2 className="h-3 w-3" /></Button></DialogTrigger>
+                        <DialogContent className="sm:max-w-[425px] rounded-[2rem]"><DialogHeader><DialogTitle>Editar</DialogTitle></DialogHeader>
+                          <form onSubmit={handleEditPatient} className="space-y-4 py-4">
+                            <Input name="name" defaultValue={p.name} required className="mb-2" /><Input name="email" type="email" defaultValue={p.email} className="mb-2" /><Input name="birthDate" type="date" defaultValue={p.birthDate} required className="mb-2" /><Input name="phone" defaultValue={p.phoneNumber} className="mb-4" />
+                            <Button type="submit" disabled={isUpdatingPatient} className="w-full">Salvar</Button>
+                          </form>
+                        </DialogContent>
+                      </Dialog>
+                      {authorityLevel >= 3 && (
+                        <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={() => handleDeletePatient(p)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
                   </TableCell></TableRow>
                 ))}{filteredPatients?.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-10">Vazio.</TableCell></TableRow>}</TableBody></Table>
             </CardContent></Card>
