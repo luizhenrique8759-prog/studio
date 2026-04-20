@@ -9,10 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { SERVICES, TIME_SLOTS, Service } from "@/lib/mock-data";
 import { format, addDays, isSunday, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Check, Clock, User, Stethoscope, ArrowRight, ArrowLeft, Calendar as CalendarIcon, CalendarCheck, Loader2, Search, ShieldAlert } from "lucide-react";
+import { Check, Clock, User, Stethoscope, ArrowRight, ArrowLeft, Calendar as CalendarIcon, CalendarCheck, Loader2, Search, ShieldAlert, XCircle } from "lucide-react";
 import Link from 'next/link';
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc } from '@/firebase';
-import { collection, query, where, addDoc, doc, orderBy } from 'firebase/firestore';
+import { collection, query, where, addDoc, doc, orderBy, getDocs } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from "@/components/ui/input";
 
@@ -84,6 +84,24 @@ export default function BookingPage() {
   }, [db, isStaff]);
   const { data: allUsers } = useCollection(allUsersQuery);
 
+  // Consulta para verificar horários já ocupados
+  const appointmentsOnDateQuery = useMemoFirebase(() => {
+    if (!db || !selectedProfessional || !selectedDate) return null;
+    return query(
+      collection(db, 'appointments'),
+      where('professionalId', '==', selectedProfessional.id),
+      where('date', '==', format(selectedDate, 'yyyy-MM-dd')),
+      where('status', '!=', 'cancelled')
+    );
+  }, [db, selectedProfessional, selectedDate]);
+  
+  const { data: existingAppointments } = useCollection(appointmentsOnDateQuery);
+
+  const unavailableTimes = useMemo(() => {
+    if (!existingAppointments) return new Set<string>();
+    return new Set(existingAppointments.map(a => a.time));
+  }, [existingAppointments]);
+
   const filteredPatients = useMemo(() => {
     if (!allUsers) return [];
     return allUsers.filter(u => 
@@ -109,7 +127,30 @@ export default function BookingPage() {
     }
     
     setIsSubmitting(true);
+
     try {
+      // Validação final de segurança no servidor antes de gravar
+      const checkQuery = query(
+        collection(db, 'appointments'),
+        where('professionalId', '==', selectedProfessional.id),
+        where('date', '==', format(selectedDate, 'yyyy-MM-dd')),
+        where('time', '==', selectedTime),
+        where('status', '!=', 'cancelled')
+      );
+      
+      const snapshot = await getDocs(checkQuery);
+      if (!snapshot.empty) {
+        toast({ 
+          variant: "destructive", 
+          title: "Horário Indisponível", 
+          description: "Este horário acabou de ser ocupado. Por favor, escolha outro." 
+        });
+        setStep(4);
+        setSelectedTime(null);
+        setIsSubmitting(false);
+        return;
+      }
+
       const appointmentData = {
         patientId: targetPatient.id,
         patientName: targetPatient.name,
@@ -292,18 +333,28 @@ export default function BookingPage() {
 
             {confirmedDate && selectedDate && (
               <div className="space-y-6">
-                <p className="text-center font-bold">Horários disponíveis para {format(selectedDate, "dd/MM")}:</p>
+                <div className="flex justify-center items-center gap-4 text-xs text-muted-foreground mb-2">
+                  <div className="flex items-center gap-1"><div className="w-3 h-3 bg-primary rounded" /> Selecionado</div>
+                  <div className="flex items-center gap-1"><div className="w-3 h-3 border border-input rounded" /> Livre</div>
+                  <div className="flex items-center gap-1"><div className="w-3 h-3 bg-muted rounded" /> Ocupado</div>
+                </div>
+                <p className="text-center font-bold">Horários para {format(selectedDate, "dd/MM")}:</p>
                 <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
-                  {TIME_SLOTS.map(t => (
-                    <Button 
-                      key={t} 
-                      variant={selectedTime === t ? "default" : "outline"} 
-                      className="rounded-lg"
-                      onClick={() => setSelectedTime(t)}
-                    >
-                      {t}
-                    </Button>
-                  ))}
+                  {TIME_SLOTS.map(t => {
+                    const isTaken = unavailableTimes.has(t);
+                    return (
+                      <Button 
+                        key={t} 
+                        variant={selectedTime === t ? "default" : "outline"} 
+                        className={`rounded-lg transition-all ${isTaken ? 'opacity-40 bg-muted cursor-not-allowed border-none' : ''}`}
+                        disabled={isTaken}
+                        onClick={() => setSelectedTime(t)}
+                      >
+                        {isTaken ? <XCircle className="w-3 h-3 mr-1 opacity-50" /> : null}
+                        {t}
+                      </Button>
+                    );
+                  })}
                 </div>
               </div>
             )}
