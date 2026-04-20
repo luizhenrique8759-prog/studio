@@ -8,13 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SERVICES } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, ShieldAlert, Users, CalendarPlus, Bell, Trash2, UserPlus, Search, FileText, Sparkles, UserCheck } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, ShieldAlert, Users, CalendarPlus, Bell, Trash2, UserPlus, Search, FileText, Sparkles, UserCheck, Edit2, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { collection, doc, updateDoc, query, orderBy, addDoc, where } from 'firebase/firestore';
+import { collection, doc, updateDoc, query, orderBy, addDoc, where, deleteDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -33,9 +33,11 @@ export default function AdminDashboard() {
 
   const [systemErrors, setSystemErrors] = useState<any[]>([]);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [isUpdatingPatient, setIsUpdatingPatient] = useState(false);
   const [patientSearch, setPatientSearch] = useState("");
   const [staffSearch, setStaffSearch] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [editingPatient, setEditingPatient] = useState<any>(null);
   const [clinicalNotes, setClinicalNotes] = useState("");
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [aiResult, setAiResult] = useState<any>(null);
@@ -60,7 +62,7 @@ export default function AdminDashboard() {
     return doc(db, 'users', user.uid);
   }, [db, user]);
   
-  const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
+  const { data: userData } = useDoc(userDocRef);
   
   const masterEmails = ["luizhenrique8759@gmail.com", "luiz87596531@gmail.com"];
   const isMaster = useMemo(() => {
@@ -117,7 +119,6 @@ export default function AdminDashboard() {
     return patients.find(p => p.id === selectedPatientId);
   }, [patients, selectedPatientId]);
 
-  // Bloqueio explícito de consulta se não houver autoridade ou paciente selecionado
   const canSeeRecords = useMemo(() => {
     return isMaster || authorityLevel >= 2;
   }, [isMaster, authorityLevel]);
@@ -172,24 +173,65 @@ export default function AdminDashboard() {
     const formData = new FormData(e.currentTarget);
     const name = formData.get('name') as string;
     const age = parseInt(formData.get('age') as string);
-    const email = (formData.get('email') as string) || null;
+    const email = (formData.get('email') as string) || "";
+    const phone = (formData.get('phone') as string) || "";
 
     try {
-      await addDoc(collection(db, 'users'), {
+      const patientRef = await addDoc(collection(db, 'users'), {
         name,
         age,
         email,
+        phoneNumber: phone,
         role: 'patient',
         authorityLevel: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
-      toast({ title: "Paciente Cadastrado", description: `${name} foi adicionado.` });
+
+      // Geração automática do prontuário inicial conforme pedido
+      await addDoc(collection(db, 'medical_records'), {
+        patientUserId: patientRef.id,
+        professionalId: user?.uid,
+        notes: `Ficha clínica iniciada para o paciente ${name}. Idade: ${age} anos.`,
+        treatment: "Avaliação inicial pendente.",
+        riskLevel: "Low",
+        createdAt: new Date().toISOString()
+      });
+
+      toast({ title: "Paciente Cadastrado", description: `${name} foi adicionado e o prontuário foi iniciado.` });
       (e.target as HTMLFormElement).reset();
     } catch (error) {
       toast({ variant: "destructive", title: "Erro ao cadastrar", description: "Verifique suas permissões." });
     } finally {
       setIsRegistering(false);
+    }
+  };
+
+  const handleEditPatient = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!db || !editingPatient) return;
+    setIsUpdatingPatient(true);
+    const formData = new FormData(e.currentTarget);
+    const name = formData.get('name') as string;
+    const age = parseInt(formData.get('age') as string);
+    const email = (formData.get('email') as string) || "";
+    const phone = (formData.get('phone') as string) || "";
+
+    try {
+      const patientRef = doc(db, 'users', editingPatient.id);
+      await updateDoc(patientRef, {
+        name,
+        age,
+        email,
+        phoneNumber: phone,
+        updatedAt: new Date().toISOString()
+      });
+      toast({ title: "Paciente Atualizado", description: "Os dados foram salvos com sucesso." });
+      setEditingPatient(null);
+    } catch (error) {
+      toast({ variant: "destructive", title: "Erro ao atualizar" });
+    } finally {
+      setIsUpdatingPatient(false);
     }
   };
 
@@ -379,7 +421,7 @@ export default function AdminDashboard() {
                 <DialogContent className="sm:max-w-[425px] rounded-[2rem]">
                   <DialogHeader>
                     <DialogTitle>Cadastro de Paciente</DialogTitle>
-                    <DialogDescription>Apenas a equipe pode realizar este cadastro.</DialogDescription>
+                    <DialogDescription>A equipe pode realizar este cadastro.</DialogDescription>
                   </DialogHeader>
                   <form onSubmit={handleRegisterPatient} className="space-y-4 py-4">
                     <div className="space-y-2">
@@ -390,9 +432,15 @@ export default function AdminDashboard() {
                       <Label htmlFor="email">E-mail (Opcional)</Label>
                       <Input id="email" name="email" type="email" placeholder="paciente@exemplo.com" className="rounded-xl h-11" />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="age">Idade</Label>
-                      <Input id="age" name="age" type="number" required placeholder="Ex: 30" className="rounded-xl h-11" />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="age">Idade</Label>
+                        <Input id="age" name="age" type="number" required placeholder="Ex: 30" className="rounded-xl h-11" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="phone">Telefone</Label>
+                        <Input id="phone" name="phone" placeholder="(11) 99999-9999" className="rounded-xl h-11" />
+                      </div>
                     </div>
                     <Button type="submit" disabled={isRegistering} className="w-full h-12 rounded-xl mt-4">
                       {isRegistering ? <Loader2 className="animate-spin" /> : "Salvar Paciente"}
@@ -405,17 +453,67 @@ export default function AdminDashboard() {
             <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
               <CardContent className="p-0">
                 <Table>
-                  <TableHeader><TableRow><TableHead className="pl-6">Nome</TableHead><TableHead>Idade</TableHead><TableHead>E-mail</TableHead><TableHead className="text-right pr-6">Data Cadastro</TableHead></TableRow></TableHeader>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="pl-6">Nome</TableHead>
+                      <TableHead>Idade</TableHead>
+                      <TableHead>Contato</TableHead>
+                      <TableHead>Cadastro</TableHead>
+                      <TableHead className="text-right pr-6">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
                   <TableBody>
                     {filteredPatients?.map((p) => (
                       <TableRow key={p.id}>
                         <TableCell className="font-bold pl-6">{p.name}</TableCell>
                         <TableCell>{p.age || '-'}</TableCell>
-                        <TableCell className="text-muted-foreground">{p.email || 'Presencial'}</TableCell>
-                        <TableCell className="text-right pr-6 text-xs text-muted-foreground">{p.createdAt ? new Date(p.createdAt).toLocaleDateString('pt-BR') : '-'}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {p.email && <div>{p.email}</div>}
+                          {p.phoneNumber && <div>{p.phoneNumber}</div>}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{p.createdAt ? new Date(p.createdAt).toLocaleDateString('pt-BR') : '-'}</TableCell>
+                        <TableCell className="text-right pr-6">
+                           <Dialog open={editingPatient?.id === p.id} onOpenChange={(open) => !open && setEditingPatient(null)}>
+                            <DialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => setEditingPatient(p)}>
+                                <Edit2 className="h-3 w-3" />
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-[425px] rounded-[2rem]">
+                              <DialogHeader>
+                                <DialogTitle>Editar Paciente</DialogTitle>
+                                <DialogDescription>Atualize os dados de {p.name}</DialogDescription>
+                              </DialogHeader>
+                              <form onSubmit={handleEditPatient} className="space-y-4 py-4">
+                                <div className="space-y-2">
+                                  <Label htmlFor="edit-name">Nome Completo</Label>
+                                  <Input id="edit-name" name="name" defaultValue={p.name} required className="rounded-xl h-11" />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="edit-email">E-mail</Label>
+                                  <Input id="edit-email" name="email" type="email" defaultValue={p.email} className="rounded-xl h-11" />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <Label htmlFor="edit-age">Idade</Label>
+                                    <Input id="edit-age" name="age" type="number" defaultValue={p.age} required className="rounded-xl h-11" />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label htmlFor="edit-phone">Telefone</Label>
+                                    <Input id="edit-phone" name="phone" defaultValue={p.phoneNumber} className="rounded-xl h-11" />
+                                  </div>
+                                </div>
+                                <Button type="submit" disabled={isUpdatingPatient} className="w-full h-12 rounded-xl mt-4 gap-2">
+                                  {isUpdatingPatient ? <Loader2 className="animate-spin h-4 w-4" /> : <Save className="h-4 w-4" />}
+                                  Salvar Alterações
+                                </Button>
+                              </form>
+                            </DialogContent>
+                          </Dialog>
+                        </TableCell>
                       </TableRow>
                     ))}
-                    {filteredPatients?.length === 0 && <TableRow><TableCell colSpan={4} className="text-center py-10 text-muted-foreground">Nenhum paciente cadastrado.</TableCell></TableRow>}
+                    {filteredPatients?.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">Nenhum paciente cadastrado.</TableCell></TableRow>}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -460,7 +558,7 @@ export default function AdminDashboard() {
                   <Card className="rounded-3xl border-none shadow-xl bg-primary/5">
                     <CardHeader>
                       <CardTitle className="text-2xl font-black text-primary">Nova Evolução Clínica</CardTitle>
-                      <CardDescription>Paciente: {selectedPatient.name}</CardDescription>
+                      <CardDescription>Paciente: {selectedPatient.name} ({selectedPatient.age} anos)</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="space-y-2">
@@ -492,7 +590,7 @@ export default function AdminDashboard() {
                   </Card>
 
                   <div className="space-y-4">
-                    <h3 className="text-lg font-bold flex items-center gap-2">Histórico</h3>
+                    <h3 className="text-lg font-bold flex items-center gap-2">Histórico Clínico</h3>
                     {isLoadingRecords ? (
                       <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>
                     ) : (
@@ -505,9 +603,15 @@ export default function AdminDashboard() {
                           <CardContent className="p-6">
                             <p className="text-sm italic">"{record.notes}"</p>
                             {record.aiSummary && <p className="text-xs mt-3 pt-3 border-t text-muted-foreground">{record.aiSummary}</p>}
+                            {record.treatment && <div className="mt-3 p-2 bg-accent/5 rounded-lg border-l-4 border-accent text-[10px]">{record.treatment}</div>}
                           </CardContent>
                         </Card>
                       ))
+                    )}
+                    {medicalRecords?.length === 0 && !isLoadingRecords && (
+                      <div className="text-center p-10 text-muted-foreground bg-muted/20 rounded-2xl border-2 border-dashed">
+                        Nenhum registro clínico encontrado para este paciente.
+                      </div>
                     )}
                   </div>
                 </>
@@ -526,7 +630,7 @@ export default function AdminDashboard() {
             <CardHeader className="bg-muted/5 border-b flex flex-row justify-between items-center">
               <div>
                 <CardTitle className="text-xl">Gestão de Colaboradores</CardTitle>
-                <CardDescription>Busque por email e atribua níveis de autoridade.</CardDescription>
+                <CardDescription>Atribua níveis de autoridade para o time.</CardDescription>
               </div>
               <div className="relative w-full max-w-xs">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -581,3 +685,4 @@ export default function AdminDashboard() {
     </div>
   );
 }
+
