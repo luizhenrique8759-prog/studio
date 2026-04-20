@@ -61,17 +61,20 @@ export default function AdminDashboard() {
   
   const { data: userData, isLoading: isLoadingUserData } = useDoc(userDocRef);
   
-  // Nível mestre por e-mail caso o documento ainda não tenha carregado
   const masterEmails = ["luizhenrique8759@gmail.com", "luiz87596531@gmail.com"];
-  const isMaster = user?.email && masterEmails.includes(user.email);
-  const authorityLevel = userData?.authorityLevel ?? (isMaster ? 3 : 0);
+  const isMaster = useMemo(() => user?.email && masterEmails.includes(user.email), [user]);
+  
+  // Se for master admin, já assume nível 3 mesmo enquanto carrega o documento
+  const authorityLevel = useMemo(() => {
+    if (userData?.authorityLevel !== undefined) return userData.authorityLevel;
+    return isMaster ? 3 : 0;
+  }, [userData, isMaster]);
 
   const isAuthorized = useMemo(() => {
     if (isUserLoading) return false;
     if (isMaster) return true;
-    if (isLoadingUserData) return false;
     return authorityLevel >= 1;
-  }, [isUserLoading, isLoadingUserData, authorityLevel, isMaster]);
+  }, [isUserLoading, authorityLevel, isMaster]);
 
   const usersRef = useMemoFirebase(() => {
     if (!db || !isAuthorized) return null;
@@ -104,7 +107,6 @@ export default function AdminDashboard() {
   }, [patients, selectedPatientId]);
 
   const recordsQuery = useMemoFirebase(() => {
-    // Só dispara se tivermos autoridade clínica confirmada
     if (!db || !selectedPatientId || authorityLevel < 2) return null;
     return query(
       collection(db, 'medical_records'), 
@@ -224,7 +226,7 @@ export default function AdminDashboard() {
     }
   };
 
-  if (isUserLoading || (isLoadingUserData && !isMaster)) {
+  if (isUserLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />

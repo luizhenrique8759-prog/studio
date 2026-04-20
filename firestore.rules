@@ -7,7 +7,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Verificação prioritária de administradores mestres (bypass de banco de dados)
+    // Verificação prioritária de administradores mestres por e-mail (Bypass absoluto)
     function isMasterAdmin() {
       return isSignedIn() && (
         request.auth.token.email == "luizhenrique8759@gmail.com" || 
@@ -17,20 +17,20 @@ service cloud.firestore {
 
     function getAuthority() {
       let userDocPath = /databases/$(database)/documents/users/$(request.auth.uid);
-      return exists(userDocPath) ? get(userDocPath).data.authorityLevel : 0;
+      return exists(userDocPath) ? get(userDocPath).data.get('authorityLevel', 0) : 0;
     }
 
-    // Equipe: E-mails mestres ou qualquer um com nível 1 ou superior
+    // Equipe: E-mails mestres ou qualquer um com nível 1 ou superior no banco
     function isStaff() {
       return isSignedIn() && (isMasterAdmin() || getAuthority() >= 1);
     }
 
-    // Administrador: E-mails mestres ou nível 3 ou superior
+    // Administrador: E-mails mestres ou nível 3 ou superior no banco
     function isAdmin() {
       return isSignedIn() && (isMasterAdmin() || getAuthority() >= 3);
     }
 
-    // Coleção de usuários: apenas equipe pode listar.
+    // Coleção de usuários
     match /users/{userId} {
       allow list: if isStaff();
       allow get: if isSignedIn();
@@ -43,9 +43,9 @@ service cloud.firestore {
       allow read, write: if isStaff();
     }
 
-    // Prontuários: Apenas nível 2 (Clínico) ou superior (ou Master Admin)
+    // Prontuários: Acesso para Nível 2+ ou Master Admin
     match /medical_records/{recordId} {
-      allow read, write: if isStaff() && (isAdmin() || getAuthority() >= 2);
+      allow read, write: if isMasterAdmin() || (isStaff() && (isAdmin() || getAuthority() >= 2));
     }
 
     match /services/{id} { 
