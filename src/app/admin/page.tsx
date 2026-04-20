@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, ShieldAlert, Trash2, Search, Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus, UserMinus, ShieldCheck, Clock, Activity, Check, X, CalendarDays, Plus, TrendingUp, CalendarPlus, Bell, DollarSign, CreditCard, Settings2, FileText } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, ShieldAlert, Trash2, Search, Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus, UserMinus, ShieldCheck, Clock, Activity, Check, X, CalendarDays, Plus, TrendingUp, CalendarPlus, Bell, DollarSign, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { signOut } from 'firebase/auth';
@@ -34,6 +34,7 @@ export default function AdminDashboard() {
 
   const [systemErrors, setSystemErrors] = useState<any[]>([]);
   const [isRegisteringStaff, setIsRegisteringStaff] = useState(false);
+  const [isRegisteringPatient, setIsRegisteringPatient] = useState(false);
   const [patientSearch, setPatientSearch] = useState("");
   const [staffSearch, setStaffSearch] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
@@ -111,7 +112,7 @@ export default function AdminDashboard() {
 
   const usersRef = useMemoFirebase(() => {
     if (!db || !isAuthorized) return null;
-    return query(collection(db, 'users'), orderBy('name', 'asc'), limit(100));
+    return query(collection(db, 'users'), orderBy('name', 'asc'), limit(500));
   }, [db, isAuthorized]);
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
 
@@ -129,7 +130,7 @@ export default function AdminDashboard() {
 
   const apptsQuery = useMemoFirebase(() => {
     if (!db || !isAuthorized) return null;
-    return query(collection(db, 'appointments'), orderBy('date', 'desc'), limit(100));
+    return query(collection(db, 'appointments'), orderBy('date', 'desc'), limit(200));
   }, [db, isAuthorized]);
   const { data: appointments, isLoading: isLoadingAppts } = useCollection(apptsQuery);
 
@@ -160,7 +161,7 @@ export default function AdminDashboard() {
 
   const recordsQuery = useMemoFirebase(() => {
     if (!db || !selectedPatientId || !canSeeRecords) return null;
-    return query(collection(db, 'medical_records'), where('patientUserId', '==', selectedPatientId), limit(50));
+    return query(collection(db, 'medical_records'), where('patientUserId', '==', selectedPatientId), limit(100));
   }, [db, selectedPatientId, canSeeRecords]);
   const { data: medicalRecordsRaw, isLoading: isLoadingRecords } = useCollection(recordsQuery);
 
@@ -176,6 +177,39 @@ export default function AdminDashboard() {
   const handleLogout = async () => {
     if (!auth) return;
     try { await signOut(auth); router.push('/auth'); } catch (error) { toast({ variant: "destructive", title: "Erro ao sair" }); }
+  };
+
+  const handleRegisterPatient = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!db) return;
+    setIsRegisteringPatient(true);
+    const formData = new FormData(e.currentTarget);
+    const name = formData.get('name') as string;
+    const email = (formData.get('email') as string).toLowerCase().trim();
+    const birthDate = formData.get('birthDate') as string;
+    const phoneNumber = formData.get('phoneNumber') as string;
+
+    const patientRef = doc(collection(db, 'users'));
+    const patientData = {
+      id: patientRef.id,
+      name, 
+      email: email || null,
+      birthDate,
+      phoneNumber,
+      role: 'patient',
+      authorityLevel: 0,
+      status: 'active',
+      createdAt: new Date().toISOString(), 
+      updatedAt: new Date().toISOString()
+    };
+
+    setDoc(patientRef, patientData)
+      .then(() => {
+        toast({ title: "Paciente Cadastrado", description: `${name} foi adicionado ao sistema.` });
+        (e.target as HTMLFormElement).reset();
+      })
+      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: patientRef.path, operation: 'create', requestResourceData: patientData })))
+      .finally(() => setIsRegisteringPatient(false));
   };
 
   const handleUpdateLevel = (targetUser: any, levelStr: string) => {
@@ -547,6 +581,40 @@ export default function AdminDashboard() {
           <div className="space-y-6">
             <div className="flex justify-between items-center gap-4">
               <div className="relative w-full max-w-xs"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Filtrar pacientes..." className="pl-10 h-10 rounded-xl" value={patientSearch} onChange={(e) => setPatientSearch(e.target.value)} /></div>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button className="rounded-full gap-2"><UserPlus className="h-4 w-4" /> Novo Paciente</Button>
+                </DialogTrigger>
+                <DialogContent className="rounded-[2rem]">
+                  <DialogHeader>
+                    <DialogTitle>Cadastrar Novo Paciente</DialogTitle>
+                    <DialogDescription>Preencha os dados básicos do paciente para o prontuário.</DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleRegisterPatient} className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label>Nome Completo</Label>
+                      <Input name="name" placeholder="Ex: João Silva" required />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Data de Nascimento</Label>
+                        <Input name="birthDate" type="date" required />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Telefone</Label>
+                        <Input name="phoneNumber" placeholder="(00) 00000-0000" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>E-mail (Opcional)</Label>
+                      <Input name="email" type="email" placeholder="email@exemplo.com" />
+                    </div>
+                    <Button type="submit" disabled={isRegisteringPatient} className="w-full rounded-xl">
+                      {isRegisteringPatient ? <Loader2 className="animate-spin" /> : "Salvar Cadastro"}
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
             </div>
             <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
               <Table>
