@@ -63,6 +63,12 @@
         "notes": { "type": "string" },
         "treatment": { "type": "string" },
         "aiSummary": { "type": "string" },
+        "attendanceDate": { "type": "string", "format": "date" },
+        "photos": { 
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of photo URLs (exams or procedures)."
+        },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": [ "id", "patientUserId", "notes", "createdAt" ]
