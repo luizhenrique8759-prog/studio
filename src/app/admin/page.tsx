@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, ShieldAlert, Users, CalendarPlus, Bell, Trash2, UserPlus, Search, FileText, Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus, UserMinus, ShieldCheck, Clock, DollarSign, TrendingUp, CreditCard, Activity } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, ShieldAlert, Users, CalendarPlus, Bell, Trash2, UserPlus, Search, FileText, Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus, UserMinus, ShieldCheck, Clock, DollarSign, TrendingUp, CreditCard, Activity, Check, X, CalendarDays } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { signOut } from 'firebase/auth';
@@ -17,13 +17,13 @@ import { collection, doc, updateDoc, query, orderBy, addDoc, where, getDocs, del
 import Link from 'next/link';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { generateClinicalSummary } from '@/ai/flows/generate-clinical-summary';
-import { SERVICES } from '@/lib/mock-data';
+import { SERVICES, TIME_SLOTS } from '@/lib/mock-data';
 
 export default function AdminDashboard() {
   const { toast } = useToast();
@@ -43,6 +43,9 @@ export default function AdminDashboard() {
   const [clinicalNotes, setClinicalNotes] = useState("");
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [aiResult, setAiResult] = useState<any>(null);
+  
+  // State for Rescheduling
+  const [reschedulingAppt, setReschedulingAppt] = useState<any>(null);
 
   useEffect(() => {
     const handleError = (error: any) => {
@@ -119,7 +122,6 @@ export default function AdminDashboard() {
   }, [db, isAuthorized]);
   const { data: appointments, isLoading: isLoadingAppts } = useCollection(apptsQuery);
 
-  // Lógica Financeira Simples
   const financialStats = useMemo(() => {
     if (!appointments) return { total: 0, count: 0, pending: 0 };
     return appointments.reduce((acc, appt) => {
@@ -128,7 +130,7 @@ export default function AdminDashboard() {
       if (appt.status === 'confirmed') {
         acc.total += price;
         acc.count += 1;
-      } else {
+      } else if (appt.status === 'pending') {
         acc.pending += price;
       }
       return acc;
@@ -311,12 +313,31 @@ export default function AdminDashboard() {
       .finally(() => setIsUpdatingPatient(false));
   };
 
-  const handleConfirmAppointment = (id: string) => {
+  const handleUpdateAppointmentStatus = (id: string, status: 'confirmed' | 'cancelled') => {
     if (!db) return;
     const apptRef = doc(db, 'appointments', id);
-    updateDoc(apptRef, { status: 'confirmed' })
-      .then(() => toast({ title: "Confirmado" }))
-      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: apptRef.path, operation: 'update', requestResourceData: { status: 'confirmed' } })));
+    const updateData = { status, updatedAt: new Date().toISOString() };
+    updateDoc(apptRef, updateData)
+      .then(() => toast({ title: status === 'confirmed' ? "Consulta Confirmada" : "Consulta Cancelada" }))
+      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: apptRef.path, operation: 'update', requestResourceData: updateData })));
+  };
+
+  const handleRescheduleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!db || !reschedulingAppt) return;
+    const formData = new FormData(e.currentTarget);
+    const date = formData.get('date') as string;
+    const time = formData.get('time') as string;
+    
+    const apptRef = doc(db, 'appointments', reschedulingAppt.id);
+    const updateData = { date, time, updatedAt: new Date().toISOString() };
+    
+    updateDoc(apptRef, updateData)
+      .then(() => {
+        toast({ title: "Consulta Reagendada" });
+        setReschedulingAppt(null);
+      })
+      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: apptRef.path, operation: 'update', requestResourceData: updateData })));
   };
 
   const handleGenerateAISummary = async () => {
@@ -390,12 +411,84 @@ export default function AdminDashboard() {
             <CardHeader className="bg-muted/5 border-b"><CardTitle className="text-xl flex items-center gap-2"><ClipboardList className="h-5 w-5 text-primary" /> Agenda da Clínica</CardTitle></CardHeader>
             <CardContent className="p-0">
               {isLoadingAppts ? <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-primary" /></div> : (
-                <Table><TableHeader><TableRow><TableHead className="pl-6">Paciente</TableHead><TableHead>Serviço</TableHead><TableHead>Data/Hora</TableHead><TableHead>Status</TableHead><TableHead className="text-right pr-6">Ações</TableHead></TableRow></TableHeader><TableBody>{appointments?.map((apt) => (
-                  <TableRow key={apt.id}><TableCell className="font-bold pl-6">{apt.patientName}</TableCell><TableCell>{apt.serviceName}</TableCell><TableCell className="text-primary font-medium">{apt.date} às {apt.time}</TableCell><TableCell><Badge variant={apt.status === 'confirmed' ? 'secondary' : 'outline'}>{apt.status === 'confirmed' ? 'Confirmado' : 'Pendente'}</Badge></TableCell><TableCell className="text-right pr-6">{apt.status === 'pending' && <Button size="sm" onClick={() => handleConfirmAppointment(apt.id)}>Confirmar</Button>}</TableCell></TableRow>
-                ))}{appointments?.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">Vazio.</TableCell></TableRow>}</TableBody></Table>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="pl-6">Paciente</TableHead>
+                      <TableHead>Serviço</TableHead>
+                      <TableHead>Data/Hora</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right pr-6">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {appointments?.map((apt) => (
+                      <TableRow key={apt.id}>
+                        <TableCell className="font-bold pl-6">{apt.patientName}</TableCell>
+                        <TableCell>{apt.serviceName}</TableCell>
+                        <TableCell className="text-primary font-medium">{formatDate(apt.date)} às {apt.time}</TableCell>
+                        <TableCell>
+                          <Badge variant={apt.status === 'confirmed' ? 'secondary' : apt.status === 'cancelled' ? 'destructive' : 'outline'}>
+                            {apt.status === 'confirmed' ? 'Confirmado' : apt.status === 'cancelled' ? 'Cancelado' : 'Pendente'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right pr-6">
+                          <div className="flex items-center justify-end gap-2">
+                            {apt.status === 'pending' && (
+                              <Button size="icon" variant="outline" className="h-8 w-8 text-green-600 border-green-200 hover:bg-green-50" onClick={() => handleUpdateAppointmentStatus(apt.id, 'confirmed')}>
+                                <Check className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {apt.status !== 'cancelled' && (
+                              <Button size="icon" variant="outline" className="h-8 w-8 text-destructive border-destructive/20 hover:bg-destructive/5" onClick={() => handleUpdateAppointmentStatus(apt.id, 'cancelled')}>
+                                <X className="h-4 w-4" />
+                              </Button>
+                            )}
+                            <Button size="icon" variant="outline" className="h-8 w-8 text-primary border-primary/20 hover:bg-primary/5" onClick={() => setReschedulingAppt(apt)}>
+                              <CalendarDays className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {appointments?.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">Vazio.</TableCell></TableRow>}
+                  </TableBody>
+                </Table>
               )}
             </CardContent>
           </Card>
+
+          {/* Reschedule Dialog */}
+          <Dialog open={!!reschedulingAppt} onOpenChange={(open) => !open && setReschedulingAppt(null)}>
+            <DialogContent className="rounded-3xl sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Reagendar Consulta</DialogTitle>
+                <DialogDescription>
+                  Altere a data e o horário para o paciente {reschedulingAppt?.patientName}.
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleRescheduleSubmit} className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Nova Data</Label>
+                  <Input type="date" name="date" defaultValue={reschedulingAppt?.date} required className="rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Novo Horário</Label>
+                  <Select name="time" defaultValue={reschedulingAppt?.time}>
+                    <SelectTrigger className="rounded-xl">
+                      <SelectValue placeholder="Selecione o horário" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIME_SLOTS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <DialogFooter className="pt-4">
+                  <Button type="submit" className="w-full rounded-xl">Salvar Reagendamento</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         <TabsContent value="patients">
@@ -494,11 +587,11 @@ export default function AdminDashboard() {
                      const service = SERVICES.find(s => s.name === appt.serviceName);
                      return (
                        <TableRow key={appt.id}>
-                         <TableCell className="pl-6 text-xs">{appt.date}</TableCell>
+                         <TableCell className="pl-6 text-xs">{formatDate(appt.date)}</TableCell>
                          <TableCell className="font-bold">{appt.patientName}</TableCell>
                          <TableCell className="text-xs">{appt.serviceName}</TableCell>
                          <TableCell className="font-medium">R$ {service?.price || 0}</TableCell>
-                         <TableCell className="text-right pr-6"><Badge variant={appt.status === 'confirmed' ? 'default' : 'outline'}>{appt.status === 'confirmed' ? 'Pago' : 'Pendente'}</Badge></TableCell>
+                         <TableCell className="text-right pr-6"><Badge variant={appt.status === 'confirmed' ? 'default' : appt.status === 'cancelled' ? 'destructive' : 'outline'}>{appt.status === 'confirmed' ? 'Pago' : appt.status === 'cancelled' ? 'Cancelado' : 'Pendente'}</Badge></TableCell>
                        </TableRow>
                      );
                    })}
