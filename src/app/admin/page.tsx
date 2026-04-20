@@ -9,11 +9,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LogOut, Loader2, ClipboardList, ShieldAlert, Users, CalendarPlus, Bell, Trash2, UserPlus, Search, FileText, Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus, UserMinus, ShieldCheck, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter } from '@/firebase';
+import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { collection, doc, updateDoc, query, orderBy, addDoc, where, getDocs, deleteDoc } from 'firebase/firestore';
+import { collection, doc, updateDoc, query, orderBy, addDoc, where, getDocs, deleteDoc, setDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -132,24 +132,32 @@ export default function AdminDashboard() {
     try { await signOut(auth); router.push('/auth'); } catch (error) { toast({ variant: "destructive", title: "Erro ao sair" }); }
   };
 
-  const handleUpdateLevel = async (targetUser: any, levelStr: string) => {
+  const handleUpdateLevel = (targetUser: any, levelStr: string) => {
     if (!db || authorityLevel < 3) return;
     const level = parseInt(levelStr);
     const roles: Record<number, string> = { 0: 'patient', 1: 'reception', 2: 'assistant', 3: 'admin', 4: 'dentist' };
     const role = roles[level];
     
-    try {
-      await updateDoc(doc(db, 'users', targetUser.id), { 
-        role,
-        authorityLevel: level,
-        status: level > 0 ? 'active' : 'pending',
-        updatedAt: new Date().toISOString()
+    const userRef = doc(db, 'users', targetUser.id);
+    const updateData = { 
+      role,
+      authorityLevel: level,
+      status: level > 0 ? 'active' : 'pending',
+      updatedAt: new Date().toISOString()
+    };
+
+    updateDoc(userRef, updateData)
+      .then(() => toast({ title: "Acesso Atualizado", description: `${targetUser.name} agora é ${roleNames[level]}.` }))
+      .catch((err) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: userRef.path,
+          operation: 'update',
+          requestResourceData: updateData
+        }));
       });
-      toast({ title: "Acesso Atualizado", description: `${targetUser.name} agora é ${roleNames[level]}.` });
-    } catch (error) { toast({ variant: "destructive", title: "Erro ao atualizar nível" }); }
   };
 
-  const handleRemoveAccess = async (targetUser: any) => {
+  const handleRemoveAccess = (targetUser: any) => {
     if (!db || authorityLevel < 3) return;
     if (targetUser.id === user?.uid) {
       toast({ variant: "destructive", title: "Operação impossível", description: "Você não pode remover seu próprio acesso." });
@@ -160,22 +168,24 @@ export default function AdminDashboard() {
       return;
     }
 
-    try {
-      if (targetUser.status === 'pending_login') {
-        await deleteDoc(doc(db, 'users', targetUser.id));
-        toast({ title: "Convite Removido" });
-      } else {
-        await updateDoc(doc(db, 'users', targetUser.id), {
-          role: 'patient',
-          authorityLevel: 0,
-          updatedAt: new Date().toISOString()
-        });
-        toast({ title: "Acesso Revogado" });
-      }
-    } catch (error) { toast({ variant: "destructive", title: "Erro ao remover acesso" }); }
+    const userRef = doc(db, 'users', targetUser.id);
+    if (targetUser.status === 'pending_login') {
+      deleteDoc(userRef)
+        .then(() => toast({ title: "Convite Removido" }))
+        .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: userRef.path, operation: 'delete' })));
+    } else {
+      const updateData = {
+        role: 'patient',
+        authorityLevel: 0,
+        updatedAt: new Date().toISOString()
+      };
+      updateDoc(userRef, updateData)
+        .then(() => toast({ title: "Acesso Revogado" }))
+        .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: userRef.path, operation: 'update', requestResourceData: updateData })));
+    }
   };
 
-  const handleRegisterPatient = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleRegisterPatient = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!db) return;
     setIsRegistering(true);
@@ -185,23 +195,38 @@ export default function AdminDashboard() {
     const email = (formData.get('email') as string) || "";
     const phone = (formData.get('phone') as string) || "";
 
-    try {
-      const patientRef = await addDoc(collection(db, 'users'), {
-        name, birthDate, email, phoneNumber: phone,
-        role: 'patient', authorityLevel: 0,
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-      });
-      await addDoc(collection(db, 'medical_records'), {
-        patientUserId: patientRef.id, professionalId: user?.uid,
-        notes: `Ficha clínica iniciada para o paciente ${name}. Nascido em: ${formatDate(birthDate)}.`,
-        treatment: "Avaliação inicial.", riskLevel: "Low", createdAt: new Date().toISOString()
-      });
-      toast({ title: "Paciente Cadastrado" });
-      (e.target as HTMLFormElement).reset();
-    } catch (error) { toast({ variant: "destructive", title: "Erro ao cadastrar" }); } finally { setIsRegistering(false); }
+    const patientRef = doc(collection(db, 'users'));
+    const patientData = {
+      name, birthDate, email, phoneNumber: phone,
+      role: 'patient', authorityLevel: 0,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    };
+
+    setDoc(patientRef, patientData)
+      .then(() => {
+        const recordRef = doc(collection(db, 'medical_records'));
+        const recordData = {
+          patientUserId: patientRef.id, professionalId: user?.uid,
+          notes: `Ficha clínica iniciada para o paciente ${name}. Nascido em: ${formatDate(birthDate)}.`,
+          treatment: "Avaliação inicial.", riskLevel: "Low", createdAt: new Date().toISOString()
+        };
+        setDoc(recordRef, recordData)
+          .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: recordRef.path, operation: 'create', requestResourceData: recordData })));
+        
+        toast({ title: "Paciente Cadastrado" });
+        (e.target as HTMLFormElement).reset();
+      })
+      .catch((err) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: patientRef.path,
+          operation: 'create',
+          requestResourceData: patientData
+        }));
+      })
+      .finally(() => setIsRegistering(false));
   };
 
-  const handleRegisterStaff = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleRegisterStaff = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!db || authorityLevel < 3) return;
     setIsRegisteringStaff(true);
@@ -212,39 +237,52 @@ export default function AdminDashboard() {
     const roles: Record<number, string> = { 1: 'reception', 2: 'assistant', 3: 'admin', 4: 'dentist' };
     const role = roles[level];
 
-    try {
-      const q = query(collection(db, 'users'), where('email', '==', email));
-      const querySnapshot = await getDocs(q);
+    const q = query(collection(db, 'users'), where('email', '==', email));
+    getDocs(q).then((querySnapshot) => {
       if (!querySnapshot.empty) {
-        await updateDoc(doc(db, 'users', querySnapshot.docs[0].id), { role, authorityLevel: level, status: 'active', updatedAt: new Date().toISOString() });
-        toast({ title: "Usuário Promovido" });
+        const userRef = doc(db, 'users', querySnapshot.docs[0].id);
+        const updateData = { role, authorityLevel: level, status: 'active', updatedAt: new Date().toISOString() };
+        updateDoc(userRef, updateData)
+          .then(() => toast({ title: "Usuário Promovido" }))
+          .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: userRef.path, operation: 'update', requestResourceData: updateData })));
       } else {
-        await addDoc(collection(db, 'users'), { name, email, role, authorityLevel: level, status: 'pending_login', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-        toast({ title: "Colaborador Convidado" });
+        const inviteRef = doc(collection(db, 'users'));
+        const inviteData = { name, email, role, authorityLevel: level, status: 'pending_login', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+        setDoc(inviteRef, inviteData)
+          .then(() => toast({ title: "Colaborador Convidado" }))
+          .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: inviteRef.path, operation: 'create', requestResourceData: inviteData })));
       }
       (e.target as HTMLFormElement).reset();
-    } catch (error) { toast({ variant: "destructive", title: "Erro ao convidar" }); } finally { setIsRegisteringStaff(false); }
+    }).finally(() => setIsRegisteringStaff(false));
   };
 
-  const handleEditPatient = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleEditPatient = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!db || !editingPatient) return;
     setIsUpdatingPatient(true);
     const formData = new FormData(e.currentTarget);
-    try {
-      await updateDoc(doc(db, 'users', editingPatient.id), {
-        name: formData.get('name'), birthDate: formData.get('birthDate'),
-        email: formData.get('email'), phoneNumber: formData.get('phone'),
-        updatedAt: new Date().toISOString()
-      });
-      toast({ title: "Paciente Atualizado" });
-      setEditingPatient(null);
-    } catch (error) { toast({ variant: "destructive", title: "Erro ao atualizar" }); } finally { setIsUpdatingPatient(false); }
+    const userRef = doc(db, 'users', editingPatient.id);
+    const updateData = {
+      name: formData.get('name'), birthDate: formData.get('birthDate'),
+      email: formData.get('email'), phoneNumber: formData.get('phone'),
+      updatedAt: new Date().toISOString()
+    };
+
+    updateDoc(userRef, updateData)
+      .then(() => {
+        toast({ title: "Paciente Atualizado" });
+        setEditingPatient(null);
+      })
+      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: userRef.path, operation: 'update', requestResourceData: updateData })))
+      .finally(() => setIsUpdatingPatient(false));
   };
 
-  const handleConfirmAppointment = async (id: string) => {
+  const handleConfirmAppointment = (id: string) => {
     if (!db) return;
-    try { await updateDoc(doc(db, 'appointments', id), { status: 'confirmed' }); toast({ title: "Confirmado" }); } catch (error) { toast({ variant: "destructive", title: "Erro" }); }
+    const apptRef = doc(db, 'appointments', id);
+    updateDoc(apptRef, { status: 'confirmed' })
+      .then(() => toast({ title: "Confirmado" }))
+      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: apptRef.path, operation: 'update', requestResourceData: { status: 'confirmed' } })));
   };
 
   const handleGenerateAISummary = async () => {
@@ -257,18 +295,23 @@ export default function AdminDashboard() {
     } catch (error) { toast({ variant: "destructive", title: "Erro na IA" }); } finally { setIsGeneratingAI(false); }
   };
 
-  const handleSaveMedicalRecord = async (e: React.FormEvent) => {
+  const handleSaveMedicalRecord = (e: React.FormEvent) => {
     e.preventDefault();
     if (!db || !selectedPatientId || !clinicalNotes || !canEditRecords) return;
-    try {
-      await addDoc(collection(db, 'medical_records'), {
-        patientUserId: selectedPatientId, professionalId: user?.uid, notes: clinicalNotes,
-        treatment: aiResult?.suggestedTreatment || "", aiSummary: aiResult?.summary || "",
-        riskLevel: aiResult?.riskLevel || "Low", createdAt: new Date().toISOString()
-      });
-      toast({ title: "Prontuário Salvo" });
-      setClinicalNotes(""); setAiResult(null);
-    } catch (error) { toast({ variant: "destructive", title: "Erro ao salvar" }); }
+    
+    const recordRef = doc(collection(db, 'medical_records'));
+    const recordData = {
+      patientUserId: selectedPatientId, professionalId: user?.uid, notes: clinicalNotes,
+      treatment: aiResult?.suggestedTreatment || "", aiSummary: aiResult?.summary || "",
+      riskLevel: aiResult?.riskLevel || "Low", createdAt: new Date().toISOString()
+    };
+
+    setDoc(recordRef, recordData)
+      .then(() => {
+        toast({ title: "Prontuário Salvo" });
+        setClinicalNotes(""); setAiResult(null);
+      })
+      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: recordRef.path, operation: 'create', requestResourceData: recordData })));
   };
 
   if (isUserLoading || isLoadingUserDoc) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
@@ -356,7 +399,7 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Card className="lg:col-span-1 rounded-3xl border-none shadow-lg h-fit"><CardHeader><CardTitle className="text-lg">Selecionar Paciente</CardTitle></CardHeader><CardContent><ScrollArea className="h-[400px] pr-4"><div className="space-y-2">{filteredPatients?.map((p) => (<Button key={p.id} variant={selectedPatientId === p.id ? "default" : "outline"} className="w-full justify-start text-left h-auto py-3 px-4 rounded-xl" onClick={() => setSelectedPatientId(p.id)}><div className="flex flex-col"><span className="font-bold">{p.name}</span><span className="text-[10px] opacity-70">{calculateAge(p.birthDate) ?? '?'} anos</span></div></Button>))}</div></ScrollArea></CardContent></Card>
             <div className="lg:col-span-2 space-y-6">
-              {selectedPatient ? (<><Card className={`rounded-3xl border-none shadow-xl ${canEditRecords ? 'bg-primary/5' : 'bg-muted/30 opacity-80'}`}><CardHeader><div className="flex justify-between items-start"><div><CardTitle className="text-2xl font-black text-primary">Evolução Clínica</CardTitle><CardDescription>{selectedPatient.name} ({calculateAge(selectedPatient.birthDate)} anos)</CardDescription></div>{!canEditRecords && <Badge variant="outline"><Lock className="h-3 w-3 mr-1" /> Apenas Leitura</Badge>}</div></CardHeader><CardContent className="space-y-4">
+              {selectedPatient ? (<><Card className={`rounded-3xl border-none shadow-xl ${canEditRecords ? 'bg-primary/5' : 'bg-muted/30 opacity-80'}`}><CardHeader><div className="flex justify-between items-start"><div><CardTitle className="text-2xl font-black text-primary">Evolução Clínica</CardTitle><CardTitle className="text-sm opacity-60">Idade: {calculateAge(selectedPatient.birthDate)} anos</CardTitle></div>{!canEditRecords && <Badge variant="outline"><Lock className="h-3 w-3 mr-1" /> Apenas Leitura</Badge>}</div></CardHeader><CardContent className="space-y-4">
                 <Textarea placeholder="Relate o procedimento..." className="min-h-[120px] rounded-2xl bg-white" value={clinicalNotes} onChange={(e) => setClinicalNotes(e.target.value)} disabled={!canEditRecords} />
                 {canEditRecords && <div className="flex gap-2"><Button onClick={handleGenerateAISummary} disabled={!clinicalNotes || isGeneratingAI} className="rounded-full bg-accent text-white">{isGeneratingAI ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}Resumo IA</Button><Button onClick={handleSaveMedicalRecord} disabled={!clinicalNotes} variant="secondary" className="rounded-full px-8">Salvar</Button></div>}
                 {aiResult && <div className="mt-4 p-4 bg-white rounded-2xl border border-accent/20 animate-in fade-in"><p className="text-sm"><strong>Resumo:</strong> {aiResult.summary}</p><p className="text-sm"><strong>Sugestão:</strong> {aiResult.suggestedTreatment}</p><p className="text-xs mt-1 font-bold">Risco: {aiResult.riskLevel}</p></div>}</CardContent></Card>

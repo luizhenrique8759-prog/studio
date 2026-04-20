@@ -31,7 +31,6 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      // Permite listagem se for staff ou se for uma busca limitada (como a de convite por email no login)
       allow list: if isStaff() || (isSignedIn() && request.query.limit <= 1);
       
       allow get: if isSignedIn() && (
@@ -54,7 +53,8 @@ service cloud.firestore {
 
     match /medical_records/{recordId} {
       allow read: if isStaff();
-      allow write: if isMasterAdmin() || isDentist();
+      allow create: if isStaff();
+      allow update, delete: if isMasterAdmin() || isDentist();
     }
 
     match /services/{id} { 
