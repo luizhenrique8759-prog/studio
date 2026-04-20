@@ -7,13 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, ShieldAlert, Users, CalendarPlus, Bell, Trash2, UserPlus, Search, FileText, Sparkles, UserCheck, Edit2, Save, Lock, Calendar } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, ShieldAlert, Users, CalendarPlus, Bell, Trash2, UserPlus, Search, FileText, Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { collection, doc, updateDoc, query, orderBy, addDoc, where } from 'firebase/firestore';
+import { collection, doc, updateDoc, query, orderBy, addDoc, where, getDocs } from 'firebase/firestore';
 import Link from 'next/link';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -21,6 +21,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { generateClinicalSummary } from '@/ai/flows/generate-clinical-summary';
 
 export default function AdminDashboard() {
@@ -32,6 +33,7 @@ export default function AdminDashboard() {
 
   const [systemErrors, setSystemErrors] = useState<any[]>([]);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [isRegisteringStaff, setIsRegisteringStaff] = useState(false);
   const [isUpdatingPatient, setIsUpdatingPatient] = useState(false);
   const [patientSearch, setPatientSearch] = useState("");
   const [staffSearch, setStaffSearch] = useState("");
@@ -56,7 +58,6 @@ export default function AdminDashboard() {
     return () => errorEmitter.off('permission-error', handleError);
   }, []);
 
-  // Helper para formatar a data string YYYY-MM-DD para DD/MM/YYYY sem erros de fuso horário
   const formatDate = (dateStr: string | undefined) => {
     if (!dateStr) return '-';
     const parts = dateStr.split('-');
@@ -65,7 +66,6 @@ export default function AdminDashboard() {
     return `${day}/${month}/${year}`;
   };
 
-  // Helper para calcular idade a partir da string YYYY-MM-DD tratando como data local
   const calculateAge = (birthDateString: string | undefined) => {
     if (!birthDateString) return null;
     try {
@@ -217,10 +217,11 @@ export default function AdminDashboard() {
         updatedAt: new Date().toISOString()
       });
 
+      const age = calculateAge(birthDate);
       await addDoc(collection(db, 'medical_records'), {
         patientUserId: patientRef.id,
         professionalId: user?.uid,
-        notes: `Ficha clínica iniciada para o paciente ${name}. Data de Nascimento: ${formatDate(birthDate)}.`,
+        notes: `Ficha clínica iniciada para o paciente ${name}. Idade calculada: ${age ?? 'N/A'} anos. Data de Nascimento: ${formatDate(birthDate)}.`,
         treatment: "Avaliação inicial pendente.",
         riskLevel: "Low",
         createdAt: new Date().toISOString()
@@ -232,6 +233,52 @@ export default function AdminDashboard() {
       toast({ variant: "destructive", title: "Erro ao cadastrar", description: "Verifique suas permissões." });
     } finally {
       setIsRegistering(false);
+    }
+  };
+
+  const handleRegisterStaff = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!db || authorityLevel < 3) return;
+    setIsRegisteringStaff(true);
+    const formData = new FormData(e.currentTarget);
+    const name = formData.get('name') as string;
+    const email = (formData.get('email') as string).toLowerCase().trim();
+    const level = parseInt(formData.get('level') as string);
+    
+    let role = 'reception';
+    if (level === 2) role = 'assistant';
+    if (level === 3) role = 'admin';
+    if (level === 4) role = 'dentist';
+
+    try {
+      const q = query(collection(db, 'users'), where('email', '==', email));
+      const querySnapshot = await getDocs(q);
+      
+      if (!querySnapshot.empty) {
+        const existingDoc = querySnapshot.docs[0];
+        await updateDoc(doc(db, 'users', existingDoc.id), {
+          role,
+          authorityLevel: level,
+          updatedAt: new Date().toISOString()
+        });
+        toast({ title: "Usuário Atualizado", description: "O nível deste e-mail já cadastrado foi atualizado." });
+      } else {
+        await addDoc(collection(db, 'users'), {
+          name,
+          email,
+          role,
+          authorityLevel: level,
+          status: 'pending_login',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+        toast({ title: "Colaborador Convidado", description: `${name} terá acesso ao sistema ao logar com o Google usando este e-mail.` });
+      }
+      (e.target as HTMLFormElement).reset();
+    } catch (error) {
+      toast({ variant: "destructive", title: "Erro ao convidar colaborador" });
+    } finally {
+      setIsRegisteringStaff(false);
     }
   };
 
@@ -666,12 +713,8 @@ export default function AdminDashboard() {
         </TabsContent>
 
         <TabsContent value="management">
-          <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
-            <CardHeader className="bg-muted/5 border-b flex flex-row justify-between items-center">
-              <div>
-                <CardTitle className="text-xl">Gestão de Colaboradores</CardTitle>
-                <CardDescription>Atribua níveis de autoridade para o time.</CardDescription>
-              </div>
+          <div className="space-y-6">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div className="relative w-full max-w-xs">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input 
@@ -681,45 +724,89 @@ export default function AdminDashboard() {
                   onChange={(e) => setStaffSearch(e.target.value)}
                 />
               </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="pl-6">Nome</TableHead>
-                    <TableHead>E-mail</TableHead>
-                    <TableHead>Cargo Atual</TableHead>
-                    <TableHead className="text-right pr-6">Definir Nível</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredStaff?.map((u) => (
-                    <TableRow key={u.id}>
-                      <TableCell className="font-bold pl-6">{u.name}</TableCell>
-                      <TableCell className="text-muted-foreground">{u.email}</TableCell>
-                      <TableCell>
-                        <Badge variant={(u.authorityLevel && u.authorityLevel > 0) ? "default" : "outline"} className="gap-1">
-                          {(u.authorityLevel && u.authorityLevel > 0) ? <UserCheck className="h-3 w-3" /> : <Users className="h-3 w-3" />}
-                          {roleNames[u.authorityLevel || 0]}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right pr-6">
-                        <select 
-                          className="border rounded-lg p-1 text-xs bg-white h-8" 
-                          value={u.authorityLevel || 0} 
-                          onChange={(e) => handleUpdateLevel(u, e.target.value)}
-                          disabled={authorityLevel < 3 || masterEmails.includes(u.email?.toLowerCase())}
-                        >
-                          {roleNames.map((name, i) => <option key={i} value={i}>{name}</option>)}
-                        </select>
-                      </TableCell>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button className="rounded-full gap-2 w-full md:w-auto"><MailPlus className="h-4 w-4" /> Adicionar Colaborador</Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[425px] rounded-[2rem]">
+                  <DialogHeader>
+                    <DialogTitle>Novo Colaborador</DialogTitle>
+                    <DialogDescription>O acesso será liberado assim que o profissional logar com este e-mail.</DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleRegisterStaff} className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="staff-name">Nome Completo</Label>
+                      <Input id="staff-name" name="name" required placeholder="Dr. Ricardo Alencar" className="rounded-xl h-11" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="staff-email">E-mail Corporativo (Google)</Label>
+                      <Input id="staff-email" name="email" type="email" required placeholder="ricardo@syncdental.com" className="rounded-xl h-11" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="staff-level">Nível de Autoridade</Label>
+                      <Select name="level" defaultValue="1">
+                        <SelectTrigger className="rounded-xl h-11">
+                          <SelectValue placeholder="Selecione o cargo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">Recepção (Agenda)</SelectItem>
+                          <SelectItem value="2">Auxiliar (Agenda + Prontuário)</SelectItem>
+                          <SelectItem value="3">Administrativo (Acesso Total)</SelectItem>
+                          <SelectItem value="4">Dentista (Clínico + IA)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button type="submit" disabled={isRegisteringStaff} className="w-full h-12 rounded-xl mt-4">
+                      {isRegisteringStaff ? <Loader2 className="animate-spin" /> : "Convidar para Equipe"}
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="pl-6">Nome</TableHead>
+                      <TableHead>E-mail</TableHead>
+                      <TableHead>Cargo Atual</TableHead>
+                      <TableHead className="text-right pr-6">Definir Nível</TableHead>
                     </TableRow>
-                  ))}
-                  {filteredStaff.length === 0 && <TableRow><TableCell colSpan={4} className="text-center py-10 text-muted-foreground">Nenhum colaborador encontrado.</TableCell></TableRow>}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredStaff?.map((u) => (
+                      <TableRow key={u.id}>
+                        <TableCell className="font-bold pl-6">
+                          {u.name}
+                          {u.status === 'pending_login' && <Badge variant="outline" className="ml-2 text-[8px] bg-amber-50">Pendente Login</Badge>}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{u.email}</TableCell>
+                        <TableCell>
+                          <Badge variant={(u.authorityLevel && u.authorityLevel > 0) ? "default" : "outline"} className="gap-1">
+                            {(u.authorityLevel && u.authorityLevel > 0) ? <UserCheck className="h-3 w-3" /> : <Users className="h-3 w-3" />}
+                            {roleNames[u.authorityLevel || 0]}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right pr-6">
+                          <select 
+                            className="border rounded-lg p-1 text-xs bg-white h-8" 
+                            value={u.authorityLevel || 0} 
+                            onChange={(e) => handleUpdateLevel(u, e.target.value)}
+                            disabled={authorityLevel < 3 || masterEmails.includes(u.email?.toLowerCase())}
+                          >
+                            {roleNames.map((name, i) => <option key={i} value={i}>{name}</option>)}
+                          </select>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {filteredStaff.length === 0 && <TableRow><TableCell colSpan={4} className="text-center py-10 text-muted-foreground">Nenhum colaborador encontrado.</TableCell></TableRow>}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

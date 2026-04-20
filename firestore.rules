@@ -7,7 +7,6 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Bypass absoluto para e-mails administrativos configurados no token
     function isMasterAdmin() {
       return isSignedIn() && (
         request.auth.token.email == "luizhenrique8759@gmail.com" || 
@@ -20,35 +19,29 @@ service cloud.firestore {
       return exists(userDocPath) ? get(userDocPath).data.get('authorityLevel', 0) : 0;
     }
 
-    // Equipe: Administradores mestres ou nível 1+ no banco
     function isStaff() {
       return isMasterAdmin() || (isSignedIn() && getAuthority() >= 1);
     }
 
-    // Administrador: Administradores mestres ou nível 3+ no banco
     function isAdmin() {
       return isMasterAdmin() || (isSignedIn() && getAuthority() >= 3);
     }
 
-    // Dentista: Administradores mestres ou nível 4+ no banco
     function isDentist() {
       return isMasterAdmin() || (isSignedIn() && getAuthority() >= 4);
     }
 
-    // Usuários
     match /users/{userId} {
       allow list: if isStaff();
       allow get: if isSignedIn();
-      allow create: if isSignedIn(); 
-      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow create: if isSignedIn(); // Permitido para o primeiro login ou admin pré-cadastrar
+      allow update, delete: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
     }
 
-    // Agendamentos
     match /appointments/{apptId} {
       allow read, write: if isStaff();
     }
 
-    // Prontuários: Leitura para equipe, escrita para Dentistas/Admins
     match /medical_records/{recordId} {
       allow read: if isStaff();
       allow write: if isMasterAdmin() || isDentist();
