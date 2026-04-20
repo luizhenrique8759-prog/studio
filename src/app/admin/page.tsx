@@ -78,7 +78,9 @@ export default function AdminDashboard() {
   const calculateAge = (birthDateString: string | undefined) => {
     if (!birthDateString) return null;
     try {
-      const [year, month, day] = birthDateString.split('-').map(Number);
+      const parts = birthDateString.split('-');
+      if (parts.length !== 3) return null;
+      const [year, month, day] = parts.map(Number);
       const birthDate = new Date(year, month - 1, day);
       const today = new Date();
       let age = today.getFullYear() - birthDate.getFullYear();
