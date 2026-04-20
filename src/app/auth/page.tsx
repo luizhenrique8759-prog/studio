@@ -4,7 +4,7 @@
 import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Stethoscope, Loader2, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Stethoscope, Loader2, ShieldAlert } from "lucide-react";
 import { useAuth, useFirestore } from '@/firebase';
 import { signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
@@ -34,7 +34,6 @@ export default function AuthPage() {
       const user = result.user;
       const userEmail = (user.email || "").toLowerCase().trim();
 
-      // Referência pelo UID (padrão Firebase Auth)
       const userRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userRef);
       
@@ -53,19 +52,24 @@ export default function AuthPage() {
           
           finalLevel = pendingData.authorityLevel || 0;
           
-          // Migrar o pré-cadastro para o UID correto do Auth
+          // Criar o documento definitivo usando o UID do Auth
           await setDoc(userRef, {
             ...pendingData,
-            id: user.uid, // Garante que o ID seja o UID
+            id: user.uid,
             name: user.displayName || pendingData.name,
             photoURL: user.photoURL,
             status: 'active',
             updatedAt: new Date().toISOString()
           });
           
-          // Remover o documento temporário se o ID dele for diferente do UID
+          // Tentar remover o documento temporário se o ID dele for diferente do UID
           if (pendingDoc.id !== user.uid) {
-            await deleteDoc(doc(db, 'users', pendingDoc.id));
+            try {
+              await deleteDoc(doc(db, 'users', pendingDoc.id));
+            } catch (e) {
+              // Silenciosamente ignorar falha na deleção se não houver permissão,
+              // o importante é que o doc oficial foi criado.
+            }
           }
         } else {
           // Novo usuário sem pré-cadastro
@@ -104,7 +108,7 @@ export default function AuthPage() {
       }
 
       // Redirecionamento baseado na autoridade
-      if (finalLevel >= 1) {
+      if (finalLevel >= 1 || bootConfig) {
         toast({ title: "Acesso Autorizado", description: `Bem-vindo à equipe Sync Dental.` });
         router.push('/admin');
       } else {
@@ -119,8 +123,12 @@ export default function AuthPage() {
       }
       
     } catch (error: any) {
-      console.error(error);
-      toast({ variant: "destructive", title: "Erro na autenticação" });
+      console.error("Login Error:", error);
+      toast({ 
+        variant: "destructive", 
+        title: "Erro na autenticação", 
+        description: "Verifique sua conexão ou fale com o administrador." 
+      });
       setIsLoggingIn(false);
     }
   };
