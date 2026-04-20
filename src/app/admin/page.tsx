@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -6,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, ShieldAlert, Trash2, Search, Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus, UserMinus, ShieldCheck, Clock, Activity, Check, X, CalendarDays, Plus, TrendingUp } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, ShieldAlert, Trash2, Search, Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus, UserMinus, ShieldCheck, Clock, Activity, Check, X, CalendarDays, Plus, TrendingUp, CalendarPlus, Bell } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { signOut } from 'firebase/auth';
@@ -149,12 +150,10 @@ export default function AdminDashboard() {
 
   const recordsQuery = useMemoFirebase(() => {
     if (!db || !selectedPatientId || !canSeeRecords) return null;
-    // Simplificamos a query para evitar problemas de índices e permissões na listagem inicial
     return query(collection(db, 'medical_records'), where('patientUserId', '==', selectedPatientId));
   }, [db, selectedPatientId, canSeeRecords]);
   const { data: medicalRecordsRaw, isLoading: isLoadingRecords } = useCollection(recordsQuery);
 
-  // Ordenação manual no cliente para evitar necessidade de índices compostos iniciais que podem barrar o acesso
   const medicalRecords = useMemo(() => {
     if (!medicalRecordsRaw) return [];
     return [...medicalRecordsRaw].sort((a, b) => {

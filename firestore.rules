@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -40,7 +41,7 @@ service cloud.firestore {
       allow list: if isStaff();
       allow get: if isSignedIn() && (request.auth.uid == userId || isStaff());
       allow create: if isSignedIn();
-      allow delete: if isMasterAdmin(); // Apenas master pode apagar usuários completamente
+      allow delete: if isMasterAdmin() || isStaff(); 
       allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
     }
 
