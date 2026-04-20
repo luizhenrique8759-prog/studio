@@ -87,7 +87,8 @@ export default function AdminDashboard() {
   const masterEmails = ["luizhenrique8759@gmail.com", "luiz88955548@gmail.com"];
   const isMaster = useMemo(() => {
     if (!user?.email) return false;
-    return masterEmails.some(email => email.toLowerCase() === user.email?.toLowerCase().trim());
+    const userEmail = user.email.toLowerCase().trim();
+    return masterEmails.some(email => email.toLowerCase() === userEmail);
   }, [user]);
   
   const authorityLevel = useMemo(() => isMaster ? 4 : (userData?.authorityLevel ?? 0), [userData, isMaster]);
@@ -163,7 +164,8 @@ export default function AdminDashboard() {
       toast({ variant: "destructive", title: "Operação impossível", description: "Você não pode remover seu próprio acesso." });
       return;
     }
-    if (masterEmails.some(email => email.toLowerCase() === targetUser.email?.toLowerCase())) {
+    const targetEmail = targetUser.email?.toLowerCase().trim();
+    if (masterEmails.some(email => email.toLowerCase() === targetEmail)) {
       toast({ variant: "destructive", title: "Restrição de Segurança", description: "O acesso de um administrador mestre não pode ser removido." });
       return;
     }
