@@ -33,9 +33,7 @@ export default function AdminDashboard() {
   const router = useRouter();
 
   const [systemErrors, setSystemErrors] = useState<any[]>([]);
-  const [isRegistering, setIsRegistering] = useState(false);
   const [isRegisteringStaff, setIsRegisteringStaff] = useState(false);
-  const [isUpdatingPatient, setIsUpdatingPatient] = useState(false);
   const [patientSearch, setPatientSearch] = useState("");
   const [staffSearch, setStaffSearch] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
@@ -52,6 +50,8 @@ export default function AdminDashboard() {
   const [reschedulingAppt, setReschedulingAppt] = useState<any>(null);
   const [newRescheduleDate, setNewRescheduleDate] = useState("");
   const [newRescheduleTime, setNewRescheduleTime] = useState("");
+
+  const masterEmails = ["luizhenrique8759@gmail.com", "luiz88955548@gmail.com"];
 
   useEffect(() => {
     const handleError = (error: any) => {
@@ -94,7 +94,6 @@ export default function AdminDashboard() {
   }, [db, user]);
   const { data: userData, isLoading: isLoadingUserDoc } = useDoc(userDocRef);
   
-  const masterEmails = ["luizhenrique8759@gmail.com", "luiz88955548@gmail.com"];
   const isMaster = useMemo(() => {
     if (!user?.email) return false;
     const userEmail = user.email.toLowerCase().trim();
