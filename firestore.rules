@@ -31,22 +31,15 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      // Permite listagem se for equipe OU se o usuário estiver procurando pelo seu próprio e-mail (migração de login)
       allow list: if isStaff() || (isSignedIn() && request.query.limit <= 1);
-      
-      // Permite get se for o próprio documento, se for equipe, ou se o e-mail coincidir (segurança para o fluxo de login)
       allow get: if isSignedIn() && (
         request.auth.uid == userId || 
         isStaff() || 
         (resource != null && resource.data.email == request.auth.token.email)
       );
-      
       allow create: if isSignedIn(); 
-      
-      // Permite deleção do doc temporário se o e-mail coincidir
-      allow delete: if isAdmin() || (isSignedIn() && resource.data.email == request.auth.token.email);
-      
-      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow delete: if isMasterAdmin() || isAdmin() || (isSignedIn() && resource.data.email == request.auth.token.email);
+      allow update: if isMasterAdmin() || isAdmin() || (isSignedIn() && request.auth.uid == userId);
     }
 
     match /appointments/{apptId} {
@@ -60,7 +53,7 @@ service cloud.firestore {
 
     match /services/{id} { 
       allow read: if isSignedIn(); 
-      allow write: if isAdmin(); 
+      allow write: if isMasterAdmin() || isAdmin(); 
     }
   }
 }

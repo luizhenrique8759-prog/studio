@@ -82,7 +82,7 @@ export default function AdminDashboard() {
     if (!user || !db) return null;
     return doc(db, 'users', user.uid);
   }, [db, user]);
-  const { data: userData } = useDoc(userDocRef);
+  const { data: userData, isLoading: isLoadingUserDoc } = useDoc(userDocRef);
   
   const masterEmails = ["luizhenrique8759@gmail.com"];
   const isMaster = useMemo(() => {
@@ -91,7 +91,7 @@ export default function AdminDashboard() {
   }, [user]);
   
   const authorityLevel = useMemo(() => isMaster ? 4 : (userData?.authorityLevel ?? 0), [userData, isMaster]);
-  const isAuthorized = useMemo(() => isMaster || authorityLevel >= 1, [authorityLevel, isMaster]);
+  const isAuthorized = useMemo(() => isMaster || (authorityLevel >= 1), [authorityLevel, isMaster]);
 
   const usersRef = useMemoFirebase(() => {
     if (!db || !isAuthorized) return null;
@@ -99,8 +99,8 @@ export default function AdminDashboard() {
   }, [db, isAuthorized]);
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
 
-  const patients = useMemo(() => allUsers?.filter(u => u.role === 'patient' && (u.authorityLevel === 0 || !u.authorityLevel)) || [], [allUsers]);
-  const staffMembers = useMemo(() => allUsers?.filter(u => u.role !== 'patient' || (u.authorityLevel && u.authorityLevel > 0)) || [], [allUsers]);
+  const patients = useMemo(() => allUsers?.filter(u => u.role === 'patient' || (!u.role && !u.authorityLevel)) || [], [allUsers]);
+  const staffMembers = useMemo(() => allUsers?.filter(u => (u.authorityLevel && u.authorityLevel > 0) || u.role !== 'patient') || [], [allUsers]);
 
   const filteredPatients = useMemo(() => patients.filter(p => 
     p.name?.toLowerCase().includes(patientSearch.toLowerCase()) || 
@@ -161,22 +161,18 @@ export default function AdminDashboard() {
     }
 
     try {
-      // Se for apenas um convite pendente (nunca logou), podemos deletar o documento
       if (targetUser.status === 'pending_login') {
         await deleteDoc(doc(db, 'users', targetUser.id));
-        toast({ title: "Convite Removido", description: `O convite para ${targetUser.email} foi cancelado.` });
+        toast({ title: "Convite Removido" });
       } else {
-        // Se for usuário ativo, apenas revogamos a autoridade para nível 0
         await updateDoc(doc(db, 'users', targetUser.id), {
           role: 'patient',
           authorityLevel: 0,
           updatedAt: new Date().toISOString()
         });
-        toast({ title: "Acesso Revogado", description: `${targetUser.name} agora não possui acesso à equipe.` });
+        toast({ title: "Acesso Revogado" });
       }
-    } catch (error) {
-      toast({ variant: "destructive", title: "Erro ao remover acesso" });
-    }
+    } catch (error) { toast({ variant: "destructive", title: "Erro ao remover acesso" }); }
   };
 
   const handleRegisterPatient = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -197,8 +193,8 @@ export default function AdminDashboard() {
       });
       await addDoc(collection(db, 'medical_records'), {
         patientUserId: patientRef.id, professionalId: user?.uid,
-        notes: `Ficha clínica iniciada para o paciente ${name}. Data de Nascimento: ${formatDate(birthDate)}.`,
-        treatment: "Avaliação inicial pendente.", riskLevel: "Low", createdAt: new Date().toISOString()
+        notes: `Ficha clínica iniciada para o paciente ${name}. Nascido em: ${formatDate(birthDate)}.`,
+        treatment: "Avaliação inicial.", riskLevel: "Low", createdAt: new Date().toISOString()
       });
       toast({ title: "Paciente Cadastrado" });
       (e.target as HTMLFormElement).reset();
@@ -221,7 +217,7 @@ export default function AdminDashboard() {
       const querySnapshot = await getDocs(q);
       if (!querySnapshot.empty) {
         await updateDoc(doc(db, 'users', querySnapshot.docs[0].id), { role, authorityLevel: level, status: 'active', updatedAt: new Date().toISOString() });
-        toast({ title: "Usuário Promovido", description: "O acesso deste e-mail foi liberado." });
+        toast({ title: "Usuário Promovido" });
       } else {
         await addDoc(collection(db, 'users'), { name, email, role, authorityLevel: level, status: 'pending_login', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
         toast({ title: "Colaborador Convidado" });
@@ -275,7 +271,7 @@ export default function AdminDashboard() {
     } catch (error) { toast({ variant: "destructive", title: "Erro ao salvar" }); }
   };
 
-  if (isUserLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (isUserLoading || isLoadingUserDoc) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!user || !isAuthorized) return <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center space-y-4"><ShieldAlert className="h-16 w-16 text-destructive" /><h1 className="text-2xl font-bold">Acesso Restrito</h1><Button onClick={handleLogout}>Sair</Button></div>;
 
   const roleNames = ["Pendente/Paciente", "Recepção", "Auxiliar", "Administrativo", "Dentista"];
@@ -363,8 +359,8 @@ export default function AdminDashboard() {
               {selectedPatient ? (<><Card className={`rounded-3xl border-none shadow-xl ${canEditRecords ? 'bg-primary/5' : 'bg-muted/30 opacity-80'}`}><CardHeader><div className="flex justify-between items-start"><div><CardTitle className="text-2xl font-black text-primary">Evolução Clínica</CardTitle><CardDescription>{selectedPatient.name} ({calculateAge(selectedPatient.birthDate)} anos)</CardDescription></div>{!canEditRecords && <Badge variant="outline"><Lock className="h-3 w-3 mr-1" /> Apenas Leitura</Badge>}</div></CardHeader><CardContent className="space-y-4">
                 <Textarea placeholder="Relate o procedimento..." className="min-h-[120px] rounded-2xl bg-white" value={clinicalNotes} onChange={(e) => setClinicalNotes(e.target.value)} disabled={!canEditRecords} />
                 {canEditRecords && <div className="flex gap-2"><Button onClick={handleGenerateAISummary} disabled={!clinicalNotes || isGeneratingAI} className="rounded-full bg-accent text-white">{isGeneratingAI ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}Resumo IA</Button><Button onClick={handleSaveMedicalRecord} disabled={!clinicalNotes} variant="secondary" className="rounded-full px-8">Salvar</Button></div>}
-                {aiResult && canEditRecords && <div className="mt-4 p-4 bg-white rounded-2xl border border-accent/20 animate-in fade-in"><p className="text-sm"><strong>Resumo:</strong> {aiResult.summary}</p><p className="text-sm"><strong>Tratamento:</strong> {aiResult.suggestedTreatment}</p></div>}</CardContent></Card>
-                <div className="space-y-4"><h3 className="text-lg font-bold">Histórico</h3>{isLoadingRecords ? <Loader2 className="animate-spin" /> : medicalRecords?.map((record) => (<Card key={record.id} className="rounded-2xl border-none shadow-sm"><CardHeader className="py-2 px-6 bg-muted/20 flex justify-between flex-row"><span className="text-xs font-bold text-primary">{new Date(record.createdAt).toLocaleDateString()}</span><Badge variant="outline">{record.riskLevel}</Badge></CardHeader><CardContent className="p-6 text-sm">"{record.notes}"{record.aiSummary && <p className="text-xs mt-2 border-t pt-2 opacity-70">{record.aiSummary}</p>}</CardContent></Card>))}{medicalRecords?.length === 0 && <div className="text-center p-10 border-2 border-dashed rounded-2xl">Vazio.</div>}</div></>) : <div className="h-full flex flex-col items-center justify-center p-20 text-center border-2 border-dashed rounded-[3rem] text-muted-foreground"><FileText className="h-16 w-16 mb-2 opacity-20" />Selecione um paciente.</div>}
+                {aiResult && <div className="mt-4 p-4 bg-white rounded-2xl border border-accent/20 animate-in fade-in"><p className="text-sm"><strong>Resumo:</strong> {aiResult.summary}</p><p className="text-sm"><strong>Sugestão:</strong> {aiResult.suggestedTreatment}</p><p className="text-xs mt-1 font-bold">Risco: {aiResult.riskLevel}</p></div>}</CardContent></Card>
+                <div className="space-y-4"><h3 className="text-lg font-bold">Histórico</h3>{isLoadingRecords ? <Loader2 className="animate-spin" /> : medicalRecords?.map((record) => (<Card key={record.id} className="rounded-2xl border-none shadow-sm"><CardHeader className="py-2 px-6 bg-muted/20 flex justify-between flex-row"><span className="text-xs font-bold text-primary">{new Date(record.createdAt).toLocaleDateString()}</span><Badge variant="outline">{record.riskLevel}</Badge></CardHeader><CardContent className="p-6 text-sm">"{record.notes}"{record.aiSummary && <div className="text-xs mt-2 border-t pt-2 opacity-70"><p><strong>IA:</strong> {record.aiSummary}</p></div>}</CardContent></Card>))}{medicalRecords?.length === 0 && <div className="text-center p-10 border-2 border-dashed rounded-2xl">Vazio.</div>}</div></>) : <div className="h-full flex flex-col items-center justify-center p-20 text-center border-2 border-dashed rounded-[3rem] text-muted-foreground"><FileText className="h-16 w-16 mb-2 opacity-20" />Selecione um paciente.</div>}
             </div>
           </div>
         </TabsContent>
@@ -387,7 +383,7 @@ export default function AdminDashboard() {
                 <TableBody>{filteredStaff?.map((u) => (
                   <TableRow key={u.id}><TableCell className="pl-6"><div className="font-bold">{u.name}</div><div className="text-[10px] opacity-60">{u.email}</div>{u.status === 'pending_login' && <Badge variant="outline" className="text-[8px] mt-1">Aguardando Login</Badge>}</TableCell><TableCell><Badge variant={u.authorityLevel > 0 ? "default" : "outline"} className="gap-1">{u.authorityLevel > 0 ? <ShieldCheck className="h-3 w-3" /> : <Clock className="h-3 w-3" />}{roleNames[u.authorityLevel || 0]}</Badge></TableCell><TableCell className="text-right pr-6">
                     <div className="flex items-center justify-end gap-2">
-                      <Select onValueChange={(val) => handleUpdateLevel(u, val)} value={String(u.authorityLevel || 0)} disabled={authorityLevel < 3 || isMaster && masterEmails.includes(u.email?.toLowerCase())}>
+                      <Select onValueChange={(val) => handleUpdateLevel(u, val)} value={String(u.authorityLevel || 0)} disabled={authorityLevel < 3 || (isMaster && masterEmails.includes(u.email?.toLowerCase()))}>
                         <SelectTrigger className="w-[180px] h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>{roleNames.map((name, i) => <SelectItem key={i} value={String(i)}>{i === 0 ? "⚠️ Pendente" : name}</SelectItem>)}</SelectContent>
                       </Select>
