@@ -22,7 +22,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { generateClinicalSummary } from '@/ai/flows/generate-clinical-summary';
-import { differenceInYears, parseISO } from 'date-fns';
 
 export default function AdminDashboard() {
   const { toast } = useToast();
@@ -57,10 +56,28 @@ export default function AdminDashboard() {
     return () => errorEmitter.off('permission-error', handleError);
   }, []);
 
+  // Helper para formatar a data string YYYY-MM-DD para DD/MM/YYYY sem erros de fuso horário
+  const formatDate = (dateStr: string | undefined) => {
+    if (!dateStr) return '-';
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    const [year, month, day] = parts;
+    return `${day}/${month}/${year}`;
+  };
+
+  // Helper para calcular idade a partir da string YYYY-MM-DD tratando como data local
   const calculateAge = (birthDateString: string | undefined) => {
     if (!birthDateString) return null;
     try {
-      return differenceInYears(new Date(), parseISO(birthDateString));
+      const [year, month, day] = birthDateString.split('-').map(Number);
+      const birthDate = new Date(year, month - 1, day);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      return age;
     } catch (e) {
       return null;
     }
@@ -203,7 +220,7 @@ export default function AdminDashboard() {
       await addDoc(collection(db, 'medical_records'), {
         patientUserId: patientRef.id,
         professionalId: user?.uid,
-        notes: `Ficha clínica iniciada para o paciente ${name}. Data de Nascimento: ${new Date(birthDate).toLocaleDateString('pt-BR')}.`,
+        notes: `Ficha clínica iniciada para o paciente ${name}. Data de Nascimento: ${formatDate(birthDate)}.`,
         treatment: "Avaliação inicial pendente.",
         riskLevel: "Low",
         createdAt: new Date().toISOString()
@@ -478,7 +495,7 @@ export default function AdminDashboard() {
                       <TableRow key={p.id}>
                         <TableCell className="font-bold pl-6">{p.name}</TableCell>
                         <TableCell>{calculateAge(p.birthDate) ?? '-'}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{p.birthDate ? new Date(p.birthDate).toLocaleDateString('pt-BR') : '-'}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{formatDate(p.birthDate)}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {p.email && <div>{p.email}</div>}
                           {p.phoneNumber && <div>{p.phoneNumber}</div>}
