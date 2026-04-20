@@ -8,10 +8,9 @@ service cloud.firestore {
     }
 
     function isMasterAdmin() {
-      let email = request.auth.token.get('email', '').lower();
       return isSignedIn() && (
-        email == 'luizhenrique8759@gmail.com' ||
-        email == 'luiz88955548@gmail.com'
+        request.auth.token.email == 'luizhenrique8759@gmail.com' ||
+        request.auth.token.email == 'luiz88955548@gmail.com'
       );
     }
 
@@ -33,7 +32,7 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow list: if isStaff() || (isSignedIn() && request.query.limit <= 1);
+      allow list: if isStaff();
       
       allow get: if isSignedIn() && (
         request.auth.uid == userId || 
@@ -48,12 +47,14 @@ service cloud.firestore {
     }
 
     match /appointments/{apptId} {
-      allow read: if isStaff() || (isSignedIn() && resource.data.patientId == request.auth.uid);
+      allow list: if isStaff();
+      allow get: if isStaff() || (isSignedIn() && resource.data.patientId == request.auth.uid);
       allow write: if isStaff();
     }
 
     match /medical_records/{recordId} {
-      allow read: if isStaff();
+      allow list: if isStaff();
+      allow get: if isStaff();
       allow create: if isStaff();
       allow update, delete: if isMasterAdmin() || isDentist();
     }
