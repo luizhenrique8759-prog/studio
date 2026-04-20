@@ -71,9 +71,8 @@ export default function AdminDashboard() {
   }, [user]);
   
   const authorityLevel = useMemo(() => {
-    if (isMaster) return 4; // Master Admin tem autoridade máxima
-    if (userData?.authorityLevel !== undefined) return userData.authorityLevel;
-    return 0;
+    if (isMaster) return 4;
+    return userData?.authorityLevel ?? 0;
   }, [userData, isMaster]);
 
   const isAuthorized = useMemo(() => {
@@ -119,12 +118,10 @@ export default function AdminDashboard() {
     return patients.find(p => p.id === selectedPatientId);
   }, [patients, selectedPatientId]);
 
-  // Toda a equipe pode ver os prontuários (Nível 1+)
   const canSeeRecords = useMemo(() => {
     return isMaster || authorityLevel >= 1;
   }, [isMaster, authorityLevel]);
 
-  // Apenas Dentista (Lvl 4) ou Master Admin pode editar prontuários
   const canEditRecords = useMemo(() => {
     return isMaster || authorityLevel >= 4;
   }, [isMaster, authorityLevel]);

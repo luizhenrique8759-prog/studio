@@ -7,7 +7,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Verificação de administradores mestres por e-mail (Bypass absoluto)
+    // Bypass absoluto para e-mails administrativos configurados no token
     function isMasterAdmin() {
       return isSignedIn() && (
         request.auth.token.email == "luizhenrique8759@gmail.com" || 
@@ -20,22 +20,22 @@ service cloud.firestore {
       return exists(userDocPath) ? get(userDocPath).data.get('authorityLevel', 0) : 0;
     }
 
-    // Equipe: E-mails mestres ou qualquer um com nível 1 ou superior no banco
+    // Equipe: Administradores mestres ou nível 1+ no banco
     function isStaff() {
-      return isSignedIn() && (isMasterAdmin() || getAuthority() >= 1);
+      return isMasterAdmin() || (isSignedIn() && getAuthority() >= 1);
     }
 
-    // Administrador: E-mails mestres ou nível 3 ou superior no banco
+    // Administrador: Administradores mestres ou nível 3+ no banco
     function isAdmin() {
-      return isSignedIn() && (isMasterAdmin() || getAuthority() >= 3);
+      return isMasterAdmin() || (isSignedIn() && getAuthority() >= 3);
     }
 
-    // Dentista: Nível 4 ou superior
+    // Dentista: Administradores mestres ou nível 4+ no banco
     function isDentist() {
-      return isSignedIn() && (isMasterAdmin() || getAuthority() >= 4);
+      return isMasterAdmin() || (isSignedIn() && getAuthority() >= 4);
     }
 
-    // Coleção de usuários
+    // Usuários
     match /users/{userId} {
       allow list: if isStaff();
       allow get: if isSignedIn();
@@ -43,12 +43,12 @@ service cloud.firestore {
       allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
     }
 
-    // Agendamentos: Exclusivo para equipe
+    // Agendamentos
     match /appointments/{apptId} {
       allow read, write: if isStaff();
     }
 
-    // Prontuários: Leitura para toda a equipe, escrita apenas para Dentista ou Master Admin
+    // Prontuários: Leitura para equipe, escrita para Dentistas/Admins
     match /medical_records/{recordId} {
       allow read: if isStaff();
       allow write: if isMasterAdmin() || isDentist();
