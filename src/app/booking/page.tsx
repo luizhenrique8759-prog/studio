@@ -5,6 +5,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { SERVICES, TIME_SLOTS, Service } from "@/lib/mock-data";
 import { format, addDays, isSunday, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -41,6 +42,19 @@ export default function BookingPage() {
     }
     setAvailableDates(dates);
   }, []);
+
+  const calculateAge = (birthDateString: string | undefined) => {
+    if (!birthDateString) return null;
+    try {
+      const [year, month, day] = birthDateString.split('-').map(Number);
+      const birthDate = new Date(year, month - 1, day);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
+      return age;
+    } catch (e) { return null; }
+  };
 
   const userDocRef = useMemoFirebase(() => {
     if (!user || !db) return null;
@@ -169,19 +183,22 @@ export default function BookingPage() {
               />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto pr-2">
-              {filteredPatients?.map((p) => (
-                <Card 
-                  key={p.id} 
-                  className={`cursor-pointer p-4 transition-all ${targetPatient?.id === p.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:border-primary/50'}`}
-                  onClick={() => setTargetPatient({ id: p.id, name: p.name })}
-                >
-                  <p className="font-bold">{p.name}</p>
-                  <div className="flex justify-between items-center mt-1">
-                    <p className="text-xs text-muted-foreground">{p.email || 'Presencial'}</p>
-                    {p.age && <Badge variant="outline" className="text-[10px]">Lvl {p.age} anos</Badge>}
-                  </div>
-                </Card>
-              ))}
+              {filteredPatients?.map((p) => {
+                const age = calculateAge(p.birthDate);
+                return (
+                  <Card 
+                    key={p.id} 
+                    className={`cursor-pointer p-4 transition-all ${targetPatient?.id === p.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:border-primary/50'}`}
+                    onClick={() => setTargetPatient({ id: p.id, name: p.name })}
+                  >
+                    <p className="font-bold">{p.name}</p>
+                    <div className="flex justify-between items-center mt-1">
+                      <p className="text-xs text-muted-foreground">{p.email || 'Presencial'}</p>
+                      {age !== null && <Badge variant="outline" className="text-[10px]">{age} anos</Badge>}
+                    </div>
+                  </Card>
+                );
+              })}
               {filteredPatients?.length === 0 && <p className="col-span-2 text-center py-10 text-muted-foreground">Nenhum paciente encontrado. Cadastre-o no Portal primeiro.</p>}
             </div>
             <div className="flex justify-between items-center pt-4">
