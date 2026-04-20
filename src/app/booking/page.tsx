@@ -31,6 +31,8 @@ export default function BookingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [availableDates, setAvailableDates] = useState<Date[]>([]);
 
+  const MASTER_EMAILS = ["luizhenrique8759@gmail.com", "luiz88955548@gmail.com"];
+
   useEffect(() => {
     const dates = [];
     let current = startOfDay(new Date());
@@ -64,8 +66,9 @@ export default function BookingPage() {
   const { data: userData, isLoading: isLoadingUserDoc } = useDoc(userDocRef);
   
   const isStaff = useMemo(() => {
-    const email = user?.email || "";
-    if (email === "luizhenrique8759@gmail.com") return true;
+    if (!user?.email) return false;
+    const email = user.email.toLowerCase();
+    if (MASTER_EMAILS.some(m => m.toLowerCase() === email)) return true;
     return (userData?.authorityLevel || 0) >= 1;
   }, [userData, user]);
 
@@ -84,23 +87,27 @@ export default function BookingPage() {
   }, [db, isStaff]);
   const { data: allUsers } = useCollection(allUsersQuery);
 
-  // Consulta para verificar horários já ocupados
+  // Consulta simplificada para evitar necessidade de índices compostos complexos no Firestore
   const appointmentsOnDateQuery = useMemoFirebase(() => {
     if (!db || !selectedProfessional || !selectedDate) return null;
     return query(
       collection(db, 'appointments'),
       where('professionalId', '==', selectedProfessional.id),
-      where('date', '==', format(selectedDate, 'yyyy-MM-dd')),
-      where('status', '!=', 'cancelled')
+      where('date', '==', format(selectedDate, 'yyyy-MM-dd'))
     );
   }, [db, selectedProfessional, selectedDate]);
   
-  const { data: existingAppointments } = useCollection(appointmentsOnDateQuery);
+  const { data: existingAppointmentsRaw } = useCollection(appointmentsOnDateQuery);
 
   const unavailableTimes = useMemo(() => {
-    if (!existingAppointments) return new Set<string>();
-    return new Set(existingAppointments.map(a => a.time));
-  }, [existingAppointments]);
+    if (!existingAppointmentsRaw) return new Set<string>();
+    // Filtragem em memória para maior rapidez e evitar erros de permissão/índice
+    return new Set(
+      existingAppointmentsRaw
+        .filter(a => a.status !== 'cancelled')
+        .map(a => a.time)
+    );
+  }, [existingAppointmentsRaw]);
 
   const filteredPatients = useMemo(() => {
     if (!allUsers) return [];
@@ -129,17 +136,18 @@ export default function BookingPage() {
     setIsSubmitting(true);
 
     try {
-      // Validação final de segurança no servidor antes de gravar
+      // Validação final de segurança: verifica se o horário realmente ainda está livre
       const checkQuery = query(
         collection(db, 'appointments'),
         where('professionalId', '==', selectedProfessional.id),
         where('date', '==', format(selectedDate, 'yyyy-MM-dd')),
-        where('time', '==', selectedTime),
-        where('status', '!=', 'cancelled')
+        where('time', '==', selectedTime)
       );
       
       const snapshot = await getDocs(checkQuery);
-      if (!snapshot.empty) {
+      const isActuallyTaken = snapshot.docs.some(doc => doc.data().status !== 'cancelled');
+
+      if (isActuallyTaken) {
         toast({ 
           variant: "destructive", 
           title: "Horário Indisponível", 
@@ -210,7 +218,6 @@ export default function BookingPage() {
           </div>
         </header>
 
-        {/* Passo 1: Seleção de Paciente */}
         {step === 1 && (
           <div className="grid gap-6 animate-in fade-in slide-in-from-bottom-4">
              <h2 className="text-3xl font-headline font-bold">Para qual paciente?</h2>
@@ -240,7 +247,7 @@ export default function BookingPage() {
                   </Card>
                 );
               })}
-              {filteredPatients?.length === 0 && <p className="col-span-2 text-center py-10 text-muted-foreground">Nenhum paciente encontrado. Cadastre-o no Portal primeiro.</p>}
+              {filteredPatients?.length === 0 && <p className="col-span-2 text-center py-10 text-muted-foreground">Nenhum paciente encontrado.</p>}
             </div>
             <div className="flex justify-between items-center pt-4">
                <p className="text-xs text-muted-foreground italic">Selecione um paciente para prosseguir.</p>
@@ -249,7 +256,6 @@ export default function BookingPage() {
           </div>
         )}
 
-        {/* Passo 2: Dentista */}
         {step === 2 && (
           <div className="grid gap-6 animate-in fade-in slide-in-from-right-4">
             <h2 className="text-3xl font-headline font-bold">Com qual especialista?</h2>
@@ -281,7 +287,6 @@ export default function BookingPage() {
           </div>
         )}
 
-        {/* Passo 3: Serviço */}
         {step === 3 && (
           <div className="grid gap-6 animate-in fade-in slide-in-from-bottom-4">
             <h2 className="text-3xl font-headline font-bold">Qual procedimento?</h2>
@@ -310,7 +315,6 @@ export default function BookingPage() {
           </div>
         )}
 
-        {/* Passo 4: Agenda */}
         {step === 4 && (
           <div className="grid gap-8 animate-in fade-in">
             <h2 className="text-3xl font-headline font-bold text-center">Selecione o Dia</h2>
@@ -333,11 +337,6 @@ export default function BookingPage() {
 
             {confirmedDate && selectedDate && (
               <div className="space-y-6">
-                <div className="flex justify-center items-center gap-4 text-xs text-muted-foreground mb-2">
-                  <div className="flex items-center gap-1"><div className="w-3 h-3 bg-primary rounded" /> Selecionado</div>
-                  <div className="flex items-center gap-1"><div className="w-3 h-3 border border-input rounded" /> Livre</div>
-                  <div className="flex items-center gap-1"><div className="w-3 h-3 bg-muted rounded" /> Ocupado</div>
-                </div>
                 <p className="text-center font-bold">Horários para {format(selectedDate, "dd/MM")}:</p>
                 <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
                   {TIME_SLOTS.map(t => {
@@ -366,13 +365,12 @@ export default function BookingPage() {
           </div>
         )}
 
-        {/* Resumo */}
         {step === 5 && (
           <div className="max-w-md mx-auto animate-in zoom-in">
             <Card className="border-2 border-primary shadow-2xl rounded-[2.5rem]">
               <CardHeader className="text-center bg-primary text-primary-foreground py-8">
-                <CardTitle className="text-2xl font-headline">CONFIRMAÇÃO</CardTitle>
-                <p className="text-xs opacity-90 mt-2">Agendamento para: {targetPatient?.name}</p>
+                <CardTitle className="text-2xl font-headline">REVISÃO</CardTitle>
+                <p className="text-xs opacity-90 mt-2">Paciente: {targetPatient?.name}</p>
               </CardHeader>
               <CardContent className="space-y-6 pt-10">
                 <div className="flex flex-col gap-4">
@@ -387,24 +385,23 @@ export default function BookingPage() {
               </CardContent>
               <CardFooter className="p-10">
                 <Button onClick={handleConfirmBooking} disabled={isSubmitting} className="w-full h-14 rounded-full text-xl font-bold">
-                  {isSubmitting ? <Loader2 className="animate-spin" /> : "Confirmar Agora"}
+                  {isSubmitting ? <Loader2 className="animate-spin" /> : "Confirmar Agendamento"}
                 </Button>
               </CardFooter>
             </Card>
           </div>
         )}
 
-        {/* Sucesso */}
         {step === 6 && (
           <div className="text-center space-y-6 py-12 animate-in fade-in">
             <div className="mx-auto w-24 h-24 bg-accent text-white rounded-full flex items-center justify-center shadow-xl">
               <Check className="w-12 h-12" />
             </div>
-            <h2 className="text-4xl font-headline font-bold text-primary">Agendado!</h2>
-            <p className="text-muted-foreground">O agendamento para {targetPatient?.name} foi realizado com sucesso.</p>
+            <h2 className="text-4xl font-headline font-bold text-primary">Sucesso!</h2>
+            <p className="text-muted-foreground">Consulta agendada para {targetPatient?.name}.</p>
             <div className="flex justify-center gap-4 pt-8">
               <Button asChild className="rounded-full px-10 h-12">
-                <Link href="/admin">Voltar para a Agenda</Link>
+                <Link href="/admin">Voltar à Agenda</Link>
               </Button>
             </div>
           </div>

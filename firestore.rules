@@ -9,14 +9,14 @@ service cloud.firestore {
 
     function isMasterAdmin() {
       return isSignedIn() && (
-        request.auth.token.email == 'luizhenrique8759@gmail.com' ||
-        request.auth.token.email == 'luiz88955548@gmail.com'
+        request.auth.token.email.matches("(?i)luizhenrique8759@gmail.com") ||
+        request.auth.token.email.matches("(?i)luiz88955548@gmail.com")
       );
     }
 
     function getAuthority() {
-      let userDocPath = /databases/$(database)/documents/users/$(request.auth.uid);
-      return exists(userDocPath) ? get(userDocPath).data.get('authorityLevel', 0) : 0;
+      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(userPath) ? get(userPath).data.get('authorityLevel', 0) : 0;
     }
 
     function isStaff() {
