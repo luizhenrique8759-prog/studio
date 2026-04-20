@@ -18,7 +18,7 @@ export default function AuthPage() {
   const { toast } = useToast();
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  const MASTER_ADMIN_EMAIL = "luizhenrique8759@gmail.com";
+  const MASTER_ADMIN_EMAILS = ["luizhenrique8759@gmail.com", "luiz88955548@gmail.com"];
 
   const handleGoogleSignIn = async () => {
     if (!auth || !db) return;
@@ -33,11 +33,10 @@ export default function AuthPage() {
       const userRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userRef);
       
-      const isMaster = userEmail === MASTER_ADMIN_EMAIL;
+      const isMaster = MASTER_ADMIN_EMAILS.includes(userEmail);
       let finalLevel = 0;
 
       if (!userSnap.exists()) {
-        // Busca convite pendente por email (limitada a 1 para cumprir regras de segurança)
         const q = query(collection(db, 'users'), where('email', '==', userEmail), limit(1));
         const emailSnap = await getDocs(q);
         
@@ -59,7 +58,6 @@ export default function AuthPage() {
             try { await deleteDoc(doc(db, 'users', pendingDoc.id)); } catch (e) {}
           }
         } else {
-          // Novo usuário sem convite
           finalLevel = isMaster ? 4 : 0;
           const newUserData = {
             id: user.uid,
@@ -83,7 +81,6 @@ export default function AuthPage() {
           updatedAt: new Date().toISOString(),
         };
 
-        // Garante que o Master Admin sempre tenha nível 4
         if (isMaster && finalLevel < 4) {
           updatePayload.authorityLevel = 4;
           updatePayload.role = 'dentist';
