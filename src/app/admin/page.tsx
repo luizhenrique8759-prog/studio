@@ -188,7 +188,7 @@ export default function AdminDashboard() {
   };
 
   const handleDeletePatient = (patient: any) => {
-    if (!db || authorityLevel < 3) return;
+    if (!db || authorityLevel < 1) return;
     if (!confirm(`Tem certeza que deseja excluir permanentemente o cadastro de ${patient.name}? Esta ação não poderá ser desfeita.`)) return;
 
     const userRef = doc(db, 'users', patient.id);
@@ -408,7 +408,7 @@ export default function AdminDashboard() {
                           </form>
                         </DialogContent>
                       </Dialog>
-                      {authorityLevel >= 3 && (
+                      {authorityLevel >= 1 && (
                         <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={() => handleDeletePatient(p)}>
                           <Trash2 className="h-3 w-3" />
                         </Button>
@@ -428,7 +428,7 @@ export default function AdminDashboard() {
                 <Textarea placeholder="Relate o procedimento..." className="min-h-[120px] rounded-2xl bg-white" value={clinicalNotes} onChange={(e) => setClinicalNotes(e.target.value)} disabled={!canEditRecords} />
                 {canEditRecords && <div className="flex gap-2"><Button onClick={handleGenerateAISummary} disabled={!clinicalNotes || isGeneratingAI} className="rounded-full bg-accent text-white">{isGeneratingAI ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}Resumo IA</Button><Button onClick={handleSaveMedicalRecord} disabled={!clinicalNotes} variant="secondary" className="rounded-full px-8">Salvar</Button></div>}
                 {aiResult && <div className="mt-4 p-4 bg-white rounded-2xl border border-accent/20 animate-in fade-in"><p className="text-sm"><strong>Resumo:</strong> {aiResult.summary}</p><p className="text-sm"><strong>Sugestão:</strong> {aiResult.suggestedTreatment}</p><p className="text-xs mt-1 font-bold">Risco: {aiResult.riskLevel}</p></div>}</CardContent></Card>
-                <div className="space-y-4"><h3 className="text-lg font-bold">Histórico</h3>{isLoadingRecords ? <Loader2 className="animate-spin" /> : medicalRecords?.map((record) => (<Card key={record.id} className="rounded-2xl border-none shadow-sm"><CardHeader className="py-2 px-6 bg-muted/20 flex justify-between flex-row"><span className="text-xs font-bold text-primary">{new Date(record.createdAt).toLocaleDateString()}</span><Badge variant="outline">{record.riskLevel}</Badge></CardHeader><CardContent className="p-6 text-sm">"{record.notes}"{record.aiSummary && <div className="text-xs mt-2 border-t pt-2 opacity-70"><p><strong>IA:</strong> {record.aiSummary}</p></div>}</CardContent></Card>))}{medicalRecords?.length === 0 && <div className="text-center p-10 border-2 border-dashed rounded-2xl">Vazio.</div>}</div></>) : <div className="h-full flex flex-col items-center justify-center p-20 text-center border-2 border-dashed rounded-[3rem] text-muted-foreground"><FileText className="h-16 w-16 mb-2 opacity-20" />Selecione um paciente.</div>}
+                <div className="space-y-4"><h3 className="text-lg font-bold">Histórico</h3>{isLoadingRecords ? <Loader2 className="spin" /> : medicalRecords?.map((record) => (<Card key={record.id} className="rounded-2xl border-none shadow-sm"><CardHeader className="py-2 px-6 bg-muted/20 flex justify-between flex-row"><span className="text-xs font-bold text-primary">{new Date(record.createdAt).toLocaleDateString()}</span><Badge variant="outline">{record.riskLevel}</Badge></CardHeader><CardContent className="p-6 text-sm">"{record.notes}"{record.aiSummary && <div className="text-xs mt-2 border-t pt-2 opacity-70"><p><strong>IA:</strong> {record.aiSummary}</p></div>}</CardContent></Card>))}{medicalRecords?.length === 0 && <div className="text-center p-10 border-2 border-dashed rounded-2xl">Vazio.</div>}</div></>) : <div className="h-full flex flex-col items-center justify-center p-20 text-center border-2 border-dashed rounded-[3rem] text-muted-foreground"><FileText className="h-16 w-16 mb-2 opacity-20" />Selecione um paciente.</div>}
             </div>
           </div>
         </TabsContent>
