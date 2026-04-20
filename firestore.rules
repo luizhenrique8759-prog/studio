@@ -31,19 +31,25 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
+      // Permite listagem se for staff ou se for uma busca limitada (como a de convite por email no login)
       allow list: if isStaff() || (isSignedIn() && request.query.limit <= 1);
+      
       allow get: if isSignedIn() && (
         request.auth.uid == userId || 
         isStaff() || 
         (resource != null && resource.data.email == request.auth.token.email)
       );
+      
       allow create: if isSignedIn(); 
-      allow delete: if isMasterAdmin() || isAdmin() || (isSignedIn() && resource.data.email == request.auth.token.email);
+      
+      allow delete: if isMasterAdmin() || isAdmin();
+      
       allow update: if isMasterAdmin() || isAdmin() || (isSignedIn() && request.auth.uid == userId);
     }
 
     match /appointments/{apptId} {
-      allow read, write: if isStaff();
+      allow read: if isStaff() || (isSignedIn() && resource.data.patientId == request.auth.uid);
+      allow write: if isStaff();
     }
 
     match /medical_records/{recordId} {

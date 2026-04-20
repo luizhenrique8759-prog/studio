@@ -4,10 +4,10 @@
 import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Stethoscope, Loader2, ShieldAlert, CheckCircle2 } from "lucide-react";
+import { Stethoscope, Loader2, CheckCircle2 } from "lucide-react";
 import { useAuth, useFirestore } from '@/firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, deleteDoc, limit } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast";
 import { useState } from 'react';
 
@@ -18,10 +18,7 @@ export default function AuthPage() {
   const { toast } = useToast();
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  const ADMIN_EMAILS: Record<string, { level: number, role: string }> = {
-    "luizhenrique8759@gmail.com": { level: 3, role: 'admin' },
-    "luiz87596531@gmail.com": { level: 1, role: 'reception' }
-  };
+  const MASTER_ADMIN_EMAIL = "luizhenrique8759@gmail.com";
 
   const handleGoogleSignIn = async () => {
     if (!auth || !db) return;
@@ -36,11 +33,12 @@ export default function AuthPage() {
       const userRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userRef);
       
-      const bootConfig = ADMIN_EMAILS[userEmail];
+      const isMaster = userEmail === MASTER_ADMIN_EMAIL;
       let finalLevel = 0;
 
       if (!userSnap.exists()) {
-        const q = query(collection(db, 'users'), where('email', '==', userEmail));
+        // Busca convite pendente por email (limitada a 1 para cumprir regras de segurança)
+        const q = query(collection(db, 'users'), where('email', '==', userEmail), limit(1));
         const emailSnap = await getDocs(q);
         
         if (!emailSnap.empty) {
@@ -61,12 +59,13 @@ export default function AuthPage() {
             try { await deleteDoc(doc(db, 'users', pendingDoc.id)); } catch (e) {}
           }
         } else {
-          finalLevel = bootConfig ? bootConfig.level : 0;
+          // Novo usuário sem convite
+          finalLevel = isMaster ? 4 : 0;
           const newUserData = {
             id: user.uid,
             name: user.displayName || 'Novo Usuário',
             email: userEmail,
-            role: bootConfig ? bootConfig.role : 'patient',
+            role: isMaster ? 'dentist' : 'patient',
             authorityLevel: finalLevel,
             photoURL: user.photoURL,
             createdAt: new Date().toISOString(),
@@ -84,10 +83,11 @@ export default function AuthPage() {
           updatedAt: new Date().toISOString(),
         };
 
-        if (bootConfig && finalLevel < bootConfig.level) {
-          updatePayload.authorityLevel = bootConfig.level;
-          updatePayload.role = bootConfig.role;
-          finalLevel = bootConfig.level;
+        // Garante que o Master Admin sempre tenha nível 4
+        if (isMaster && finalLevel < 4) {
+          updatePayload.authorityLevel = 4;
+          updatePayload.role = 'dentist';
+          finalLevel = 4;
         }
 
         await updateDoc(userRef, updatePayload);
