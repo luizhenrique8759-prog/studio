@@ -6,11 +6,11 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { SERVICES, TIME_SLOTS, Service } from "@/lib/mock-data";
+import { TIME_SLOTS } from "@/lib/mock-data";
 import { format, addDays, isSunday, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Check, Clock, User, Stethoscope, ArrowRight, ArrowLeft, Calendar as CalendarIcon, CalendarCheck, Loader2, Search, ShieldAlert, XCircle } from "lucide-react";
-import Link from 'next/link';
+import Link from 'link';
 import { useFirestore, useCollection, useUser, useMemoFirebase, useDoc } from '@/firebase';
 import { collection, query, where, addDoc, doc, orderBy, getDocs } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
@@ -23,7 +23,7 @@ export default function BookingPage() {
   const { toast } = useToast();
   
   const [step, setStep] = useState(1);
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [selectedService, setSelectedService] = useState<any | null>(null);
   const [selectedProfessional, setSelectedProfessional] = useState<any | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
@@ -81,13 +81,18 @@ export default function BookingPage() {
   }, [db]);
   const { data: professionals, isLoading: isLoadingProfs } = useCollection(profQuery);
 
+  const servicesQuery = useMemoFirebase(() => {
+    if (!db) return null;
+    return query(collection(db, 'services'), orderBy('name', 'asc'));
+  }, [db]);
+  const { data: services, isLoading: isLoadingServices } = useCollection(servicesQuery);
+
   const allUsersQuery = useMemoFirebase(() => {
     if (!db || !isStaff) return null;
     return query(collection(db, 'users'), orderBy('name', 'asc'));
   }, [db, isStaff]);
   const { data: allUsers } = useCollection(allUsersQuery);
 
-  // Consulta simplificada para evitar necessidade de índices compostos complexos no Firestore
   const appointmentsOnDateQuery = useMemoFirebase(() => {
     if (!db || !selectedProfessional || !selectedDate) return null;
     return query(
@@ -101,7 +106,6 @@ export default function BookingPage() {
 
   const unavailableTimes = useMemo(() => {
     if (!existingAppointmentsRaw) return new Set<string>();
-    // Filtragem em memória para maior rapidez e evitar erros de permissão/índice
     return new Set(
       existingAppointmentsRaw
         .filter(a => a.status !== 'cancelled')
@@ -136,7 +140,6 @@ export default function BookingPage() {
     setIsSubmitting(true);
 
     try {
-      // Validação final de segurança: verifica se o horário realmente ainda está livre
       const checkQuery = query(
         collection(db, 'appointments'),
         where('professionalId', '==', selectedProfessional.id),
@@ -290,24 +293,33 @@ export default function BookingPage() {
         {step === 3 && (
           <div className="grid gap-6 animate-in fade-in slide-in-from-bottom-4">
             <h2 className="text-3xl font-headline font-bold">Qual procedimento?</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {SERVICES.map((s) => (
-                <Card 
-                  key={s.id} 
-                  className={`cursor-pointer border-2 transition-all ${selectedService?.id === s.id ? 'border-primary bg-primary/5' : ''}`}
-                  onClick={() => setSelectedService(s)}
-                >
-                  <CardHeader>
-                    <CardTitle className="text-lg">{s.name}</CardTitle>
-                    <CardDescription>{s.description}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex justify-between">
-                    <span className="text-xs font-bold"><Clock className="inline w-3 h-3" /> {s.duration} min</span>
-                    <span className="text-lg font-bold text-primary">R$ {s.price}</span>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            {isLoadingServices ? (
+              <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {services?.map((s) => (
+                  <Card 
+                    key={s.id} 
+                    className={`cursor-pointer border-2 transition-all ${selectedService?.id === s.id ? 'border-primary bg-primary/5' : ''}`}
+                    onClick={() => setSelectedService(s)}
+                  >
+                    <CardHeader>
+                      <CardTitle className="text-lg">{s.name}</CardTitle>
+                      <CardDescription className="line-clamp-2">{s.description}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex justify-between">
+                      <span className="text-xs font-bold"><Clock className="inline w-3 h-3" /> {s.duration} min</span>
+                      <span className="text-lg font-bold text-primary">R$ {s.price?.toLocaleString('pt-BR')}</span>
+                    </CardContent>
+                  </Card>
+                ))}
+                {services?.length === 0 && (
+                  <div className="col-span-2 p-12 text-center border-2 border-dashed rounded-3xl text-muted-foreground">
+                    Nenhum procedimento cadastrado no sistema. Por favor, adicione procedimentos no painel administrativo.
+                  </div>
+                )}
+              </div>
+            )}
             <div className="flex justify-between pt-4">
               <Button variant="outline" onClick={handleBack} className="rounded-full px-8">Voltar</Button>
               <Button disabled={!selectedService} onClick={handleNext} className="ml-auto rounded-full px-10 h-12">Próximo</Button>
@@ -380,7 +392,7 @@ export default function BookingPage() {
                 </div>
                 <div className="pt-6 border-t flex justify-between items-center">
                   <span className="font-bold">Total</span>
-                  <span className="text-2xl font-bold text-primary">R$ {selectedService?.price}</span>
+                  <span className="text-2xl font-bold text-primary">R$ {selectedService?.price?.toLocaleString('pt-BR')}</span>
                 </div>
               </CardContent>
               <CardFooter className="p-10">

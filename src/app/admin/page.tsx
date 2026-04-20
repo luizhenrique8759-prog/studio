@@ -2,28 +2,28 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, ShieldAlert, Trash2, Search, Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus, UserMinus, ShieldCheck, Clock, Activity, Check, X, CalendarDays, Plus, TrendingUp, CalendarPlus, Bell, DollarSign, CreditCard } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, ShieldAlert, Trash2, Search, Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus, UserMinus, ShieldCheck, Clock, Activity, Check, X, CalendarDays, Plus, TrendingUp, CalendarPlus, Bell, DollarSign, CreditCard, Settings2, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { collection, doc, updateDoc, query, orderBy, where, deleteDoc, setDoc, limit } from 'firebase/firestore';
+import { collection, doc, updateDoc, query, orderBy, where, deleteDoc, setDoc, limit, addDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { generateClinicalSummary } from '@/ai/flows/generate-clinical-summary';
-import { SERVICES, TIME_SLOTS } from '@/lib/mock-data';
+import { TIME_SLOTS } from '@/lib/mock-data';
 
 export default function AdminDashboard() {
   const { toast } = useToast();
@@ -50,6 +50,10 @@ export default function AdminDashboard() {
   const [reschedulingAppt, setReschedulingAppt] = useState<any>(null);
   const [newRescheduleDate, setNewRescheduleDate] = useState("");
   const [newRescheduleTime, setNewRescheduleTime] = useState("");
+
+  // Procedure Management States
+  const [isManagingService, setIsManagingService] = useState<any>(null);
+  const [isSavingService, setIsSavingService] = useState(false);
 
   const masterEmails = useMemo(() => ["luizhenrique8759@gmail.com", "luiz88955548@gmail.com"], []);
 
@@ -129,10 +133,16 @@ export default function AdminDashboard() {
   }, [db, isAuthorized]);
   const { data: appointments, isLoading: isLoadingAppts } = useCollection(apptsQuery);
 
+  const servicesQuery = useMemoFirebase(() => {
+    if (!db || !isAuthorized) return null;
+    return query(collection(db, 'services'), orderBy('name', 'asc'));
+  }, [db, isAuthorized]);
+  const { data: services, isLoading: isLoadingServices } = useCollection(servicesQuery);
+
   const financialStats = useMemo(() => {
-    if (!appointments) return { total: 0, count: 0, pending: 0 };
+    if (!appointments || !services) return { total: 0, count: 0, pending: 0 };
     return appointments.reduce((acc, appt) => {
-      const service = SERVICES.find(s => s.name === appt.serviceName);
+      const service = services.find(s => s.name === appt.serviceName || s.id === appt.serviceId);
       const price = service?.price || 0;
       if (appt.paymentStatus === 'paid') {
         acc.total += price;
@@ -142,7 +152,7 @@ export default function AdminDashboard() {
       }
       return acc;
     }, { total: 0, count: 0, pending: 0 });
-  }, [appointments]);
+  }, [appointments, services]);
 
   const selectedPatient = useMemo(() => allUsers?.find(p => p.id === selectedPatientId), [allUsers, selectedPatientId]);
   const canSeeRecords = useMemo(() => isAuthorized, [isAuthorized]);
@@ -309,6 +319,48 @@ export default function AdminDashboard() {
       .finally(() => setIsRegisteringStaff(false));
   };
 
+  const handleSaveService = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!db) return;
+    setIsSavingService(true);
+    const formData = new FormData(e.currentTarget);
+    const serviceData = {
+      name: formData.get('name') as string,
+      description: formData.get('description') as string,
+      price: parseFloat(formData.get('price') as string),
+      duration: parseInt(formData.get('duration') as string),
+      updatedAt: new Date().toISOString(),
+    };
+
+    try {
+      if (isManagingService?.id) {
+        await updateDoc(doc(db, 'services', isManagingService.id), serviceData);
+        toast({ title: "Serviço Atualizado" });
+      } else {
+        await addDoc(collection(db, 'services'), {
+          ...serviceData,
+          createdAt: new Date().toISOString(),
+        });
+        toast({ title: "Serviço Criado" });
+      }
+      setIsManagingService(null);
+    } catch (err) {
+      toast({ variant: "destructive", title: "Erro ao salvar serviço" });
+    } finally {
+      setIsSavingService(false);
+    }
+  };
+
+  const handleDeleteService = async (id: string) => {
+    if (!db || !confirm("Deseja realmente excluir este procedimento?")) return;
+    try {
+      await deleteDoc(doc(db, 'services', id));
+      toast({ title: "Serviço Removido" });
+    } catch (err) {
+      toast({ variant: "destructive", title: "Erro ao remover serviço" });
+    }
+  };
+
   const handleSaveMedicalRecord = (e: React.FormEvent) => {
     e.preventDefault();
     if (!db || !selectedPatientId || !clinicalNotes || !canEditRecords) return;
@@ -390,6 +442,7 @@ export default function AdminDashboard() {
           <TabsTrigger value="patients" className="rounded-lg font-bold">Pacientes</TabsTrigger>
           {canSeeRecords && <TabsTrigger value="records" className="rounded-lg font-bold">Área Clínica</TabsTrigger>}
           {(authorityLevel >= 3 || isMaster) && <TabsTrigger value="finance" className="rounded-lg font-bold">Financeiro</TabsTrigger>}
+          {(authorityLevel >= 3 || isMaster) && <TabsTrigger value="procedures" className="rounded-lg font-bold">Procedimentos</TabsTrigger>}
           {(authorityLevel >= 3 || isMaster) && <TabsTrigger value="management" className="rounded-lg font-bold">Equipe & Acessos</TabsTrigger>}
         </TabsList>
 
@@ -779,7 +832,7 @@ export default function AdminDashboard() {
                  <TableHeader><TableRow><TableHead className="pl-6">Data</TableHead><TableHead>Paciente</TableHead><TableHead>Serviço</TableHead><TableHead>Valor</TableHead><TableHead className="text-right pr-6">Status Financeiro</TableHead></TableRow></TableHeader>
                  <TableBody>
                    {appointments?.slice(0, 10).map((appt) => {
-                     const service = SERVICES.find(s => s.name === appt.serviceName);
+                     const service = services?.find(s => s.name === appt.serviceName || s.id === appt.serviceId);
                      return (
                        <TableRow key={appt.id}>
                          <TableCell className="pl-6 text-xs">{formatDate(appt.date)}</TableCell>
@@ -798,6 +851,91 @@ export default function AdminDashboard() {
                </Table>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="procedures">
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-headline font-bold text-primary">Catálogo de Procedimentos</h2>
+              <Dialog open={!!isManagingService} onOpenChange={(open) => !open && setIsManagingService(null)}>
+                <DialogTrigger asChild>
+                  <Button onClick={() => setIsManagingService({})} className="rounded-full gap-2">
+                    <Plus className="h-4 w-4" /> Novo Procedimento
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="rounded-[2rem]">
+                  <DialogHeader>
+                    <DialogTitle>{isManagingService?.id ? "Editar Procedimento" : "Novo Procedimento"}</DialogTitle>
+                    <DialogDescription>Defina as informações e o valor do serviço.</DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleSaveService} className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label>Nome do Serviço</Label>
+                      <Input name="name" defaultValue={isManagingService?.name} placeholder="Ex: Limpeza Dental" required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Descrição</Label>
+                      <Textarea name="description" defaultValue={isManagingService?.description} placeholder="Descreva o que está incluído..." />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Preço (R$)</Label>
+                        <Input name="price" type="number" step="0.01" defaultValue={isManagingService?.price} placeholder="0.00" required />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Duração (minutos)</Label>
+                        <Input name="duration" type="number" defaultValue={isManagingService?.duration} placeholder="45" required />
+                      </div>
+                    </div>
+                    <Button type="submit" disabled={isSavingService} className="w-full rounded-xl">
+                      {isSavingService ? <Loader2 className="animate-spin" /> : "Salvar Alterações"}
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="pl-6">Procedimento</TableHead>
+                      <TableHead>Duração</TableHead>
+                      <TableHead>Preço</TableHead>
+                      <TableHead className="text-right pr-6">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoadingServices ? (
+                      <TableRow><TableCell colSpan={4} className="text-center py-10"><Loader2 className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
+                    ) : services?.length === 0 ? (
+                      <TableRow><TableCell colSpan={4} className="text-center py-10 text-muted-foreground">Nenhum procedimento cadastrado.</TableCell></TableRow>
+                    ) : services?.map((s) => (
+                      <TableRow key={s.id}>
+                        <TableCell className="pl-6">
+                          <div className="font-bold">{s.name}</div>
+                          <div className="text-[10px] text-muted-foreground">{s.description}</div>
+                        </TableCell>
+                        <TableCell>{s.duration} min</TableCell>
+                        <TableCell className="font-bold text-primary">R$ {s.price?.toLocaleString('pt-BR')}</TableCell>
+                        <TableCell className="text-right pr-6">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="outline" size="icon" className="h-8 w-8 text-primary" onClick={() => setIsManagingService(s)}>
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                            <Button variant="outline" size="icon" className="h-8 w-8 text-destructive border-destructive/20" onClick={() => handleDeleteService(s.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="management">
