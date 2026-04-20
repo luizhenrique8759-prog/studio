@@ -42,7 +42,7 @@ service cloud.firestore {
       
       allow create: if isSignedIn(); 
       
-      // Permitir que toda a equipe (isStaff) possa excluir pacientes conforme solicitado
+      // Permitir que toda a equipe (isStaff) possa excluir pacientes
       allow delete: if isStaff();
       
       allow update: if isMasterAdmin() || isAdmin() || (isSignedIn() && request.auth.uid == userId);

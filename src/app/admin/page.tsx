@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, ShieldAlert, Users, CalendarPlus, Bell, Trash2, UserPlus, Search, FileText, Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus, UserMinus, ShieldCheck, Clock } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, ShieldAlert, Users, CalendarPlus, Bell, Trash2, UserPlus, Search, FileText, Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus, UserMinus, ShieldCheck, Clock, DollarSign, TrendingUp, CreditCard, Activity } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { signOut } from 'firebase/auth';
@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { generateClinicalSummary } from '@/ai/flows/generate-clinical-summary';
+import { SERVICES } from '@/lib/mock-data';
 
 export default function AdminDashboard() {
   const { toast } = useToast();
@@ -118,6 +119,22 @@ export default function AdminDashboard() {
   }, [db, isAuthorized]);
   const { data: appointments, isLoading: isLoadingAppts } = useCollection(apptsQuery);
 
+  // Lógica Financeira Simples
+  const financialStats = useMemo(() => {
+    if (!appointments) return { total: 0, count: 0, pending: 0 };
+    return appointments.reduce((acc, appt) => {
+      const service = SERVICES.find(s => s.name === appt.serviceName);
+      const price = service?.price || 0;
+      if (appt.status === 'confirmed') {
+        acc.total += price;
+        acc.count += 1;
+      } else {
+        acc.pending += price;
+      }
+      return acc;
+    }, { total: 0, count: 0, pending: 0 });
+  }, [appointments]);
+
   const selectedPatient = useMemo(() => allUsers?.find(p => p.id === selectedPatientId), [allUsers, selectedPatientId]);
   const canSeeRecords = useMemo(() => isMaster || authorityLevel >= 1, [isMaster, authorityLevel]);
   const canEditRecords = useMemo(() => isMaster || authorityLevel >= 4, [isMaster, authorityLevel]);
@@ -165,8 +182,8 @@ export default function AdminDashboard() {
       return;
     }
     const targetEmail = targetUser.email?.toLowerCase().trim();
-    if (masterEmails.some(email => email.toLowerCase() === targetEmail)) {
-      toast({ variant: "destructive", title: "Restrição de Segurança", description: "O acesso de um administrador mestre não pode ser removido." });
+    if (masterEmails.some(email => email.toLowerCase() === targetEmail) && !isMaster) {
+      toast({ variant: "destructive", title: "Restrição de Segurança", description: "Apenas o Master Admin pode remover outros administradores mestres." });
       return;
     }
 
@@ -364,6 +381,7 @@ export default function AdminDashboard() {
           <TabsTrigger value="appointments" className="rounded-lg font-bold">Agenda</TabsTrigger>
           <TabsTrigger value="patients" className="rounded-lg font-bold">Pacientes</TabsTrigger>
           {canSeeRecords && <TabsTrigger value="records" className="rounded-lg font-bold">Prontuários</TabsTrigger>}
+          {authorityLevel >= 3 && <TabsTrigger value="finance" className="rounded-lg font-bold">Financeiro</TabsTrigger>}
           {authorityLevel >= 3 && <TabsTrigger value="management" className="rounded-lg font-bold">Equipe & Acessos</TabsTrigger>}
         </TabsList>
 
@@ -433,6 +451,63 @@ export default function AdminDashboard() {
           </div>
         </TabsContent>
 
+        <TabsContent value="finance">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <Card className="rounded-3xl border-none shadow-lg bg-primary text-white">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Faturamento Total</CardTitle>
+                <TrendingUp className="h-4 w-4 opacity-70" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-black">R$ {financialStats.total.toLocaleString('pt-BR')}</div>
+                <p className="text-[10px] opacity-70 mt-1">{financialStats.count} atendimentos confirmados</p>
+              </CardContent>
+            </Card>
+            <Card className="rounded-3xl border-none shadow-lg">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Previsão Pendente</CardTitle>
+                <Clock className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-black text-primary">R$ {financialStats.pending.toLocaleString('pt-BR')}</div>
+                <p className="text-[10px] text-muted-foreground mt-1">Valor de consultas aguardando confirmação</p>
+              </CardContent>
+            </Card>
+            <Card className="rounded-3xl border-none shadow-lg">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Volume de Atendimento</CardTitle>
+                <Activity className="h-4 w-4 text-accent" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-black">{appointments?.length || 0}</div>
+                <p className="text-[10px] text-muted-foreground mt-1">Total de agendamentos registrados</p>
+              </CardContent>
+            </Card>
+          </div>
+          <Card className="rounded-3xl border-none shadow-xl overflow-hidden">
+            <CardHeader className="border-b bg-muted/5"><CardTitle className="text-lg">Extrato de Serviços</CardTitle></CardHeader>
+            <CardContent className="p-0">
+               <Table>
+                 <TableHeader><TableRow><TableHead className="pl-6">Data</TableHead><TableHead>Paciente</TableHead><TableHead>Serviço</TableHead><TableHead>Valor</TableHead><TableHead className="text-right pr-6">Status</TableHead></TableRow></TableHeader>
+                 <TableBody>
+                   {appointments?.slice(0, 10).map((appt) => {
+                     const service = SERVICES.find(s => s.name === appt.serviceName);
+                     return (
+                       <TableRow key={appt.id}>
+                         <TableCell className="pl-6 text-xs">{appt.date}</TableCell>
+                         <TableCell className="font-bold">{appt.patientName}</TableCell>
+                         <TableCell className="text-xs">{appt.serviceName}</TableCell>
+                         <TableCell className="font-medium">R$ {service?.price || 0}</TableCell>
+                         <TableCell className="text-right pr-6"><Badge variant={appt.status === 'confirmed' ? 'default' : 'outline'}>{appt.status === 'confirmed' ? 'Pago' : 'Pendente'}</Badge></TableCell>
+                       </TableRow>
+                     );
+                   })}
+                 </TableBody>
+               </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="management">
           <div className="space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -451,7 +526,7 @@ export default function AdminDashboard() {
                 <TableBody>{filteredStaff?.map((u) => (
                   <TableRow key={u.id}><TableCell className="pl-6"><div className="font-bold">{u.name}</div><div className="text-[10px] opacity-60">{u.email}</div>{u.status === 'pending_login' && <Badge variant="outline" className="text-[8px] mt-1">Aguardando Login</Badge>}</TableCell><TableCell><Badge variant={u.authorityLevel > 0 ? "default" : "outline"} className="gap-1">{u.authorityLevel > 0 ? <ShieldCheck className="h-3 w-3" /> : <Clock className="h-3 w-3" />}{roleNames[u.authorityLevel || 0]}</Badge></TableCell><TableCell className="text-right pr-6">
                     <div className="flex items-center justify-end gap-2">
-                      <Select onValueChange={(val) => handleUpdateLevel(u, val)} value={String(u.authorityLevel || 0)} disabled={authorityLevel < 3 || (isMaster && masterEmails.some(email => email.toLowerCase() === u.email?.toLowerCase()))}>
+                      <Select onValueChange={(val) => handleUpdateLevel(u, val)} value={String(u.authorityLevel || 0)} disabled={authorityLevel < 3 || (isMaster && masterEmails.some(email => email.toLowerCase() === u.email?.toLowerCase()) && u.id !== user?.uid)}>
                         <SelectTrigger className="w-[180px] h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>{roleNames.map((name, i) => <SelectItem key={i} value={String(i)}>{i === 0 ? "⚠️ Pendente" : name}</SelectItem>)}</SelectContent>
                       </Select>
@@ -460,7 +535,7 @@ export default function AdminDashboard() {
                         size="icon" 
                         className="h-8 w-8 text-destructive hover:bg-destructive/10" 
                         onClick={() => handleRemoveAccess(u)}
-                        disabled={authorityLevel < 3 || u.id === user?.uid || masterEmails.some(email => email.toLowerCase() === u.email?.toLowerCase())}
+                        disabled={authorityLevel < 3 || u.id === user?.uid || (masterEmails.some(email => email.toLowerCase() === u.email?.toLowerCase()) && !isMaster)}
                       >
                         <UserMinus className="h-4 w-4" />
                       </Button>
