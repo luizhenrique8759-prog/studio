@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SERVICES } from "@/lib/mock-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, ShieldAlert, Users, CalendarPlus, Bell, Trash2, UserPlus, Search, FileText, Sparkles, UserCheck, Edit2, Save } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, ShieldAlert, Users, CalendarPlus, Bell, Trash2, UserPlus, Search, FileText, Sparkles, UserCheck, Edit2, Save, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter } from '@/firebase';
 import { signOut } from 'firebase/auth';
@@ -71,7 +71,7 @@ export default function AdminDashboard() {
   }, [user]);
   
   const authorityLevel = useMemo(() => {
-    if (isMaster) return 3;
+    if (isMaster) return 4; // Master Admin tem autoridade máxima
     if (userData?.authorityLevel !== undefined) return userData.authorityLevel;
     return 0;
   }, [userData, isMaster]);
@@ -119,8 +119,14 @@ export default function AdminDashboard() {
     return patients.find(p => p.id === selectedPatientId);
   }, [patients, selectedPatientId]);
 
+  // Toda a equipe pode ver os prontuários (Nível 1+)
   const canSeeRecords = useMemo(() => {
-    return isMaster || authorityLevel >= 2;
+    return isMaster || authorityLevel >= 1;
+  }, [isMaster, authorityLevel]);
+
+  // Apenas Dentista (Lvl 4) ou Master Admin pode editar prontuários
+  const canEditRecords = useMemo(() => {
+    return isMaster || authorityLevel >= 4;
   }, [isMaster, authorityLevel]);
 
   const recordsQuery = useMemoFirebase(() => {
@@ -188,7 +194,6 @@ export default function AdminDashboard() {
         updatedAt: new Date().toISOString()
       });
 
-      // Geração automática do prontuário inicial conforme pedido
       await addDoc(collection(db, 'medical_records'), {
         patientUserId: patientRef.id,
         professionalId: user?.uid,
@@ -246,7 +251,7 @@ export default function AdminDashboard() {
   };
 
   const handleGenerateAISummary = async () => {
-    if (!clinicalNotes || !selectedPatient) return;
+    if (!clinicalNotes || !selectedPatient || !canEditRecords) return;
     setIsGeneratingAI(true);
     try {
       const result = await generateClinicalSummary({
@@ -264,7 +269,7 @@ export default function AdminDashboard() {
 
   const handleSaveMedicalRecord = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!db || !selectedPatientId || !clinicalNotes) return;
+    if (!db || !selectedPatientId || !clinicalNotes || !canEditRecords) return;
     
     try {
       await addDoc(collection(db, 'medical_records'), {
@@ -555,31 +560,43 @@ export default function AdminDashboard() {
             <div className="lg:col-span-2 space-y-6">
               {selectedPatient ? (
                 <>
-                  <Card className="rounded-3xl border-none shadow-xl bg-primary/5">
+                  <Card className={`rounded-3xl border-none shadow-xl ${canEditRecords ? 'bg-primary/5' : 'bg-muted/30 opacity-80'}`}>
                     <CardHeader>
-                      <CardTitle className="text-2xl font-black text-primary">Nova Evolução Clínica</CardTitle>
-                      <CardDescription>Paciente: {selectedPatient.name} ({selectedPatient.age} anos)</CardDescription>
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <CardTitle className="text-2xl font-black text-primary">Nova Evolução Clínica</CardTitle>
+                          <CardDescription>Paciente: {selectedPatient.name} ({selectedPatient.age} anos)</CardDescription>
+                        </div>
+                        {!canEditRecords && (
+                          <Badge variant="outline" className="gap-1 text-muted-foreground">
+                            <Lock className="h-3 w-3" /> Apenas Leitura
+                          </Badge>
+                        )}
+                      </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="space-y-2">
                         <Label>Notas do Dentista</Label>
                         <Textarea 
-                          placeholder="Relate o procedimento..." 
+                          placeholder={canEditRecords ? "Relate o procedimento..." : "Apenas dentistas podem adicionar evoluções."}
                           className="min-h-[120px] rounded-2xl bg-white"
                           value={clinicalNotes}
                           onChange={(e) => setClinicalNotes(e.target.value)}
+                          disabled={!canEditRecords}
                         />
                       </div>
                       
-                      <div className="flex gap-2">
-                        <Button onClick={handleGenerateAISummary} disabled={!clinicalNotes || isGeneratingAI} className="rounded-full bg-accent text-white">
-                          {isGeneratingAI ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
-                          Resumo IA
-                        </Button>
-                        <Button onClick={handleSaveMedicalRecord} disabled={!clinicalNotes} variant="secondary" className="rounded-full px-8">Salvar</Button>
-                      </div>
+                      {canEditRecords && (
+                        <div className="flex gap-2">
+                          <Button onClick={handleGenerateAISummary} disabled={!clinicalNotes || isGeneratingAI} className="rounded-full bg-accent text-white">
+                            {isGeneratingAI ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+                            Resumo IA
+                          </Button>
+                          <Button onClick={handleSaveMedicalRecord} disabled={!clinicalNotes} variant="secondary" className="rounded-full px-8">Salvar</Button>
+                        </div>
+                      )}
 
-                      {aiResult && (
+                      {aiResult && canEditRecords && (
                         <div className="mt-4 p-4 bg-white rounded-2xl border border-accent/20 animate-in fade-in">
                           <h4 className="font-bold text-accent flex items-center gap-2"><Sparkles className="h-4 w-4" /> Sugestão Profissional</h4>
                           <p className="text-sm mt-2"><strong>Resumo:</strong> {aiResult.summary}</p>
@@ -618,7 +635,7 @@ export default function AdminDashboard() {
               ) : (
                 <div className="h-full flex flex-col items-center justify-center p-20 text-center border-2 border-dashed rounded-[3rem]">
                   <FileText className="h-16 w-16 text-muted-foreground/20" />
-                  <p className="text-muted-foreground">Selecione um paciente para gerenciar o prontuário.</p>
+                  <p className="text-muted-foreground">Selecione um paciente para visualizar o prontuário.</p>
                 </div>
               )}
             </div>
@@ -685,4 +702,3 @@ export default function AdminDashboard() {
     </div>
   );
 }
-

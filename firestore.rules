@@ -30,6 +30,11 @@ service cloud.firestore {
       return isSignedIn() && (isMasterAdmin() || getAuthority() >= 3);
     }
 
+    // Dentista: Nível 4 ou superior
+    function isDentist() {
+      return isSignedIn() && (isMasterAdmin() || getAuthority() >= 4);
+    }
+
     // Coleção de usuários
     match /users/{userId} {
       allow list: if isStaff();
@@ -43,11 +48,10 @@ service cloud.firestore {
       allow read, write: if isStaff();
     }
 
-    // Prontuários: Acesso para Nível 2+ ou Master Admin
+    // Prontuários: Leitura para toda a equipe, escrita apenas para Dentista ou Master Admin
     match /medical_records/{recordId} {
-      // Regra explícita para leitura e escrita
-      allow read, write: if isMasterAdmin();
-      allow read, write: if isStaff() && (isAdmin() || getAuthority() >= 2);
+      allow read: if isStaff();
+      allow write: if isMasterAdmin() || isDentist();
     }
 
     match /services/{id} { 
