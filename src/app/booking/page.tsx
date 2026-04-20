@@ -51,7 +51,7 @@ export default function BookingPage() {
   
   const isStaff = useMemo(() => {
     const email = user?.email || "";
-    if (email === "luizhenrique8759@gmail.com" || email === "luiz87596531@gmail.com") return true;
+    if (email === "luizhenrique8759@gmail.com") return true;
     return (userData?.authorityLevel || 0) >= 1;
   }, [userData, user]);
 

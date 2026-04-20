@@ -84,7 +84,7 @@ export default function AdminDashboard() {
   }, [db, user]);
   const { data: userData } = useDoc(userDocRef);
   
-  const masterEmails = ["luizhenrique8759@gmail.com", "luiz87596531@gmail.com"];
+  const masterEmails = ["luizhenrique8759@gmail.com"];
   const isMaster = useMemo(() => {
     if (!user?.email) return false;
     return masterEmails.includes(user.email.toLowerCase().trim());

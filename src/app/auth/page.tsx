@@ -20,7 +20,7 @@ export default function AuthPage() {
 
   const ADMIN_EMAILS: Record<string, { level: number, role: string }> = {
     "luizhenrique8759@gmail.com": { level: 3, role: 'admin' },
-    "luiz87596531@gmail.com": { level: 3, role: 'admin' }
+    "luiz87596531@gmail.com": { level: 1, role: 'reception' }
   };
 
   const handleGoogleSignIn = async () => {
