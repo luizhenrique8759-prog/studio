@@ -7,13 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, ShieldAlert, Users, CalendarPlus, Bell, Trash2, UserPlus, Search, FileText, Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus, UserMinus, ShieldCheck } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, ShieldAlert, Users, CalendarPlus, Bell, Trash2, UserPlus, Search, FileText, Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus, UserMinus, ShieldCheck, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { collection, doc, updateDoc, query, orderBy, addDoc, where, getDocs } from 'firebase/firestore';
+import { collection, doc, updateDoc, query, orderBy, addDoc, where, getDocs, deleteDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -99,7 +99,7 @@ export default function AdminDashboard() {
   }, [db, isAuthorized]);
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
 
-  const patients = useMemo(() => allUsers?.filter(u => u.role === 'patient') || [], [allUsers]);
+  const patients = useMemo(() => allUsers?.filter(u => u.role === 'patient' && (u.authorityLevel === 0 || !u.authorityLevel)) || [], [allUsers]);
   const staffMembers = useMemo(() => allUsers?.filter(u => u.role !== 'patient' || (u.authorityLevel && u.authorityLevel > 0)) || [], [allUsers]);
 
   const filteredPatients = useMemo(() => patients.filter(p => 
@@ -117,7 +117,7 @@ export default function AdminDashboard() {
   }, [db, isAuthorized]);
   const { data: appointments, isLoading: isLoadingAppts } = useCollection(apptsQuery);
 
-  const selectedPatient = useMemo(() => patients.find(p => p.id === selectedPatientId), [patients, selectedPatientId]);
+  const selectedPatient = useMemo(() => allUsers?.find(p => p.id === selectedPatientId), [allUsers, selectedPatientId]);
   const canSeeRecords = useMemo(() => isMaster || authorityLevel >= 1, [isMaster, authorityLevel]);
   const canEditRecords = useMemo(() => isMaster || authorityLevel >= 4, [isMaster, authorityLevel]);
 
@@ -147,6 +147,36 @@ export default function AdminDashboard() {
       });
       toast({ title: "Acesso Atualizado", description: `${targetUser.name} agora é ${roleNames[level]}.` });
     } catch (error) { toast({ variant: "destructive", title: "Erro ao atualizar nível" }); }
+  };
+
+  const handleRemoveAccess = async (targetUser: any) => {
+    if (!db || authorityLevel < 3) return;
+    if (targetUser.id === user?.uid) {
+      toast({ variant: "destructive", title: "Operação impossível", description: "Você não pode remover seu próprio acesso." });
+      return;
+    }
+    if (masterEmails.includes(targetUser.email?.toLowerCase())) {
+      toast({ variant: "destructive", title: "Restrição de Segurança", description: "O acesso de um administrador mestre não pode ser removido." });
+      return;
+    }
+
+    try {
+      // Se for apenas um convite pendente (nunca logou), podemos deletar o documento
+      if (targetUser.status === 'pending_login') {
+        await deleteDoc(doc(db, 'users', targetUser.id));
+        toast({ title: "Convite Removido", description: `O convite para ${targetUser.email} foi cancelado.` });
+      } else {
+        // Se for usuário ativo, apenas revogamos a autoridade para nível 0
+        await updateDoc(doc(db, 'users', targetUser.id), {
+          role: 'patient',
+          authorityLevel: 0,
+          updatedAt: new Date().toISOString()
+        });
+        toast({ title: "Acesso Revogado", description: `${targetUser.name} agora não possui acesso à equipe.` });
+      }
+    } catch (error) {
+      toast({ variant: "destructive", title: "Erro ao remover acesso" });
+    }
   };
 
   const handleRegisterPatient = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -353,13 +383,24 @@ export default function AdminDashboard() {
                 </DialogContent></Dialog>
             </div>
             <Card className="border-none shadow-xl rounded-3xl overflow-hidden"><CardContent className="p-0">
-              <Table><TableHeader><TableRow><TableHead className="pl-6">Nome / E-mail</TableHead><TableHead>Cargo Atual</TableHead><TableHead className="text-right pr-6">Liberar/Definir Acesso</TableHead></TableRow></TableHeader>
+              <Table><TableHeader><TableRow><TableHead className="pl-6">Nome / E-mail</TableHead><TableHead>Cargo Atual</TableHead><TableHead className="text-right pr-6">Ações</TableHead></TableRow></TableHeader>
                 <TableBody>{filteredStaff?.map((u) => (
                   <TableRow key={u.id}><TableCell className="pl-6"><div className="font-bold">{u.name}</div><div className="text-[10px] opacity-60">{u.email}</div>{u.status === 'pending_login' && <Badge variant="outline" className="text-[8px] mt-1">Aguardando Login</Badge>}</TableCell><TableCell><Badge variant={u.authorityLevel > 0 ? "default" : "outline"} className="gap-1">{u.authorityLevel > 0 ? <ShieldCheck className="h-3 w-3" /> : <Clock className="h-3 w-3" />}{roleNames[u.authorityLevel || 0]}</Badge></TableCell><TableCell className="text-right pr-6">
-                    <Select onValueChange={(val) => handleUpdateLevel(u, val)} value={String(u.authorityLevel || 0)} disabled={authorityLevel < 3 || isMaster && masterEmails.includes(u.email?.toLowerCase())}>
-                      <SelectTrigger className="w-[180px] ml-auto h-8 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>{roleNames.map((name, i) => <SelectItem key={i} value={String(i)}>{i === 0 ? "⚠️ Pendente" : name}</SelectItem>)}</SelectContent>
-                    </Select>
+                    <div className="flex items-center justify-end gap-2">
+                      <Select onValueChange={(val) => handleUpdateLevel(u, val)} value={String(u.authorityLevel || 0)} disabled={authorityLevel < 3 || isMaster && masterEmails.includes(u.email?.toLowerCase())}>
+                        <SelectTrigger className="w-[180px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>{roleNames.map((name, i) => <SelectItem key={i} value={String(i)}>{i === 0 ? "⚠️ Pendente" : name}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-destructive hover:bg-destructive/10" 
+                        onClick={() => handleRemoveAccess(u)}
+                        disabled={authorityLevel < 3 || u.id === user?.uid || masterEmails.includes(u.email?.toLowerCase())}
+                      >
+                        <UserMinus className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell></TableRow>
                 ))}{filteredStaff.length === 0 && <TableRow><TableCell colSpan={3} className="text-center py-10">Nenhum membro ou solicitação pendente.</TableCell></TableRow>}</TableBody></Table>
             </CardContent></Card>
