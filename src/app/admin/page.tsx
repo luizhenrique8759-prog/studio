@@ -5,16 +5,15 @@ import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SERVICES } from "@/lib/mock-data";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, ShieldAlert, Users, CalendarPlus, Bell, Trash2, UserPlus, Search, FileText, Sparkles, UserCheck, Edit2, Save, Lock } from "lucide-react";
+import { LogOut, Loader2, ClipboardList, ShieldAlert, Users, CalendarPlus, Bell, Trash2, UserPlus, Search, FileText, Sparkles, UserCheck, Edit2, Save, Lock, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { collection, doc, updateDoc, query, orderBy, addDoc, where, deleteDoc } from 'firebase/firestore';
+import { collection, doc, updateDoc, query, orderBy, addDoc, where } from 'firebase/firestore';
 import Link from 'next/link';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -23,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { generateClinicalSummary } from '@/ai/flows/generate-clinical-summary';
+import { differenceInYears, parseISO } from 'date-fns';
 
 export default function AdminDashboard() {
   const { toast } = useToast();
@@ -56,6 +56,15 @@ export default function AdminDashboard() {
     errorEmitter.on('permission-error', handleError);
     return () => errorEmitter.off('permission-error', handleError);
   }, []);
+
+  const calculateAge = (birthDateString: string | undefined) => {
+    if (!birthDateString) return null;
+    try {
+      return differenceInYears(new Date(), parseISO(birthDateString));
+    } catch (e) {
+      return null;
+    }
+  };
 
   const userDocRef = useMemoFirebase(() => {
     if (!user || !db) return null;
@@ -103,7 +112,7 @@ export default function AdminDashboard() {
   const filteredStaff = useMemo(() => {
     return allUsers?.filter(u => 
       (u.name?.toLowerCase().includes(staffSearch.toLowerCase()) || u.email?.toLowerCase().includes(staffSearch.toLowerCase())) &&
-      (u.role !== 'patient' || u.authorityLevel > 0)
+      (u.role !== 'patient' || (u.authorityLevel && u.authorityLevel > 0))
     ) || [];
   }, [allUsers, staffSearch]);
 
@@ -175,14 +184,14 @@ export default function AdminDashboard() {
     setIsRegistering(true);
     const formData = new FormData(e.currentTarget);
     const name = formData.get('name') as string;
-    const age = parseInt(formData.get('age') as string);
+    const birthDate = formData.get('birthDate') as string;
     const email = (formData.get('email') as string) || "";
     const phone = (formData.get('phone') as string) || "";
 
     try {
       const patientRef = await addDoc(collection(db, 'users'), {
         name,
-        age,
+        birthDate,
         email,
         phoneNumber: phone,
         role: 'patient',
@@ -194,7 +203,7 @@ export default function AdminDashboard() {
       await addDoc(collection(db, 'medical_records'), {
         patientUserId: patientRef.id,
         professionalId: user?.uid,
-        notes: `Ficha clínica iniciada para o paciente ${name}. Idade: ${age} anos.`,
+        notes: `Ficha clínica iniciada para o paciente ${name}. Data de Nascimento: ${new Date(birthDate).toLocaleDateString('pt-BR')}.`,
         treatment: "Avaliação inicial pendente.",
         riskLevel: "Low",
         createdAt: new Date().toISOString()
@@ -215,7 +224,7 @@ export default function AdminDashboard() {
     setIsUpdatingPatient(true);
     const formData = new FormData(e.currentTarget);
     const name = formData.get('name') as string;
-    const age = parseInt(formData.get('age') as string);
+    const birthDate = formData.get('birthDate') as string;
     const email = (formData.get('email') as string) || "";
     const phone = (formData.get('phone') as string) || "";
 
@@ -223,7 +232,7 @@ export default function AdminDashboard() {
       const patientRef = doc(db, 'users', editingPatient.id);
       await updateDoc(patientRef, {
         name,
-        age,
+        birthDate,
         email,
         phoneNumber: phone,
         updatedAt: new Date().toISOString()
@@ -436,8 +445,8 @@ export default function AdminDashboard() {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="age">Idade</Label>
-                        <Input id="age" name="age" type="number" required placeholder="Ex: 30" className="rounded-xl h-11" />
+                        <Label htmlFor="birthDate">Data de Nascimento</Label>
+                        <Input id="birthDate" name="birthDate" type="date" required className="rounded-xl h-11" />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="phone">Telefone</Label>
@@ -459,8 +468,8 @@ export default function AdminDashboard() {
                     <TableRow>
                       <TableHead className="pl-6">Nome</TableHead>
                       <TableHead>Idade</TableHead>
+                      <TableHead>Nascimento</TableHead>
                       <TableHead>Contato</TableHead>
-                      <TableHead>Cadastro</TableHead>
                       <TableHead className="text-right pr-6">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -468,12 +477,12 @@ export default function AdminDashboard() {
                     {filteredPatients?.map((p) => (
                       <TableRow key={p.id}>
                         <TableCell className="font-bold pl-6">{p.name}</TableCell>
-                        <TableCell>{p.age || '-'}</TableCell>
+                        <TableCell>{calculateAge(p.birthDate) ?? '-'}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{p.birthDate ? new Date(p.birthDate).toLocaleDateString('pt-BR') : '-'}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {p.email && <div>{p.email}</div>}
                           {p.phoneNumber && <div>{p.phoneNumber}</div>}
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{p.createdAt ? new Date(p.createdAt).toLocaleDateString('pt-BR') : '-'}</TableCell>
                         <TableCell className="text-right pr-6">
                            <Dialog open={editingPatient?.id === p.id} onOpenChange={(open) => !open && setEditingPatient(null)}>
                             <DialogTrigger asChild>
@@ -497,8 +506,8 @@ export default function AdminDashboard() {
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                   <div className="space-y-2">
-                                    <Label htmlFor="edit-age">Idade</Label>
-                                    <Input id="edit-age" name="age" type="number" defaultValue={p.age} required className="rounded-xl h-11" />
+                                    <Label htmlFor="edit-birthDate">Data de Nascimento</Label>
+                                    <Input id="edit-birthDate" name="birthDate" type="date" defaultValue={p.birthDate} required className="rounded-xl h-11" />
                                   </div>
                                   <div className="space-y-2">
                                     <Label htmlFor="edit-phone">Telefone</Label>
@@ -545,7 +554,7 @@ export default function AdminDashboard() {
                       >
                         <div className="flex flex-col">
                           <span className="font-bold">{p.name}</span>
-                          <span className="text-[10px] opacity-70">{p.age} anos</span>
+                          <span className="text-[10px] opacity-70">{calculateAge(p.birthDate) ?? '?'} anos</span>
                         </div>
                       </Button>
                     ))}
@@ -562,7 +571,7 @@ export default function AdminDashboard() {
                       <div className="flex justify-between items-start">
                         <div>
                           <CardTitle className="text-2xl font-black text-primary">Nova Evolução Clínica</CardTitle>
-                          <CardDescription>Paciente: {selectedPatient.name} ({selectedPatient.age} anos)</CardDescription>
+                          <CardDescription>Paciente: {selectedPatient.name} ({calculateAge(selectedPatient.birthDate)} anos)</CardDescription>
                         </div>
                         {!canEditRecords && (
                           <Badge variant="outline" className="gap-1 text-muted-foreground">
@@ -672,8 +681,8 @@ export default function AdminDashboard() {
                       <TableCell className="font-bold pl-6">{u.name}</TableCell>
                       <TableCell className="text-muted-foreground">{u.email}</TableCell>
                       <TableCell>
-                        <Badge variant={u.authorityLevel > 0 ? "default" : "outline"} className="gap-1">
-                          {u.authorityLevel > 0 ? <UserCheck className="h-3 w-3" /> : <Users className="h-3 w-3" />}
+                        <Badge variant={(u.authorityLevel && u.authorityLevel > 0) ? "default" : "outline"} className="gap-1">
+                          {(u.authorityLevel && u.authorityLevel > 0) ? <UserCheck className="h-3 w-3" /> : <Users className="h-3 w-3" />}
                           {roleNames[u.authorityLevel || 0]}
                         </Badge>
                       </TableCell>

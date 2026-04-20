@@ -17,9 +17,10 @@
           "type": "string",
           "format": "email"
         },
-        "age": {
-          "type": "number",
-          "description": "Patient age."
+        "birthDate": {
+          "type": "string",
+          "format": "date",
+          "description": "Patient date of birth."
         },
         "phoneNumber": {
           "type": "string"
