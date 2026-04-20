@@ -4,9 +4,9 @@
 import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Stethoscope, Loader2, ShieldAlert } from "lucide-react";
+import { Stethoscope, Loader2, ShieldAlert, CheckCircle2 } from "lucide-react";
 import { useAuth, useFirestore } from '@/firebase';
-import { signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
+import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast";
 import { useState } from 'react';
@@ -18,7 +18,6 @@ export default function AuthPage() {
   const { toast } = useToast();
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Configuração mestre para administradores absolutos
   const ADMIN_EMAILS: Record<string, { level: number, role: string }> = {
     "luizhenrique8759@gmail.com": { level: 3, role: 'admin' },
     "luiz87596531@gmail.com": { level: 3, role: 'admin' }
@@ -41,18 +40,14 @@ export default function AuthPage() {
       let finalLevel = 0;
 
       if (!userSnap.exists()) {
-        // Se não existir doc com esse UID, checar se existe pré-cadastro por e-mail
         const q = query(collection(db, 'users'), where('email', '==', userEmail));
         const emailSnap = await getDocs(q);
         
         if (!emailSnap.empty) {
-          // Existe um pré-cadastro (possivelmente criado pelo admin por e-mail)
           const pendingDoc = emailSnap.docs[0];
           const pendingData = pendingDoc.data();
-          
           finalLevel = pendingData.authorityLevel || 0;
           
-          // Criar o documento definitivo usando o UID do Auth
           await setDoc(userRef, {
             ...pendingData,
             id: user.uid,
@@ -62,21 +57,14 @@ export default function AuthPage() {
             updatedAt: new Date().toISOString()
           });
           
-          // Tentar remover o documento temporário se o ID dele for diferente do UID
           if (pendingDoc.id !== user.uid) {
-            try {
-              await deleteDoc(doc(db, 'users', pendingDoc.id));
-            } catch (e) {
-              // Silenciosamente ignorar falha na deleção se não houver permissão,
-              // o importante é que o doc oficial foi criado.
-            }
+            try { await deleteDoc(doc(db, 'users', pendingDoc.id)); } catch (e) {}
           }
         } else {
-          // Novo usuário sem pré-cadastro
           finalLevel = bootConfig ? bootConfig.level : 0;
           const newUserData = {
             id: user.uid,
-            name: user.displayName || 'Usuário',
+            name: user.displayName || 'Novo Usuário',
             email: userEmail,
             role: bootConfig ? bootConfig.role : 'patient',
             authorityLevel: finalLevel,
@@ -87,7 +75,6 @@ export default function AuthPage() {
           await setDoc(userRef, newUserData);
         }
       } else {
-        // Usuário já existente
         const existingData = userSnap.data();
         finalLevel = existingData.authorityLevel || 0;
         
@@ -97,7 +84,6 @@ export default function AuthPage() {
           updatedAt: new Date().toISOString(),
         };
 
-        // Garante que o administrador mestre sempre mantenha seu nível
         if (bootConfig && finalLevel < bootConfig.level) {
           updatePayload.authorityLevel = bootConfig.level;
           updatePayload.role = bootConfig.role;
@@ -107,19 +93,12 @@ export default function AuthPage() {
         await updateDoc(userRef, updatePayload);
       }
 
-      // Redirecionamento baseado na autoridade
-      if (finalLevel >= 1 || bootConfig) {
-        toast({ title: "Acesso Autorizado", description: `Bem-vindo à equipe Sync Dental.` });
+      if (finalLevel >= 1) {
+        toast({ title: "Bem-vindo!", description: `Acesso autorizado ao Portal Sync.` });
         router.push('/admin');
       } else {
-        // Se for paciente, desloga e avisa que não tem acesso direto ao app
-        await signOut(auth);
-        toast({ 
-          variant: "destructive", 
-          title: "Acesso Restrito", 
-          description: "O Portal Sync é exclusivo para colaboradores da clínica." 
-        });
-        setIsLoggingIn(false);
+        toast({ title: "Login Realizado", description: "Aguarde a liberação do seu acesso por um administrador." });
+        router.push('/dashboard');
       }
       
     } catch (error: any) {
@@ -127,7 +106,7 @@ export default function AuthPage() {
       toast({ 
         variant: "destructive", 
         title: "Erro na autenticação", 
-        description: "Verifique sua conexão ou fale com o administrador." 
+        description: "Verifique sua conexão ou tente novamente." 
       });
       setIsLoggingIn(false);
     }
@@ -141,14 +120,14 @@ export default function AuthPage() {
             <Stethoscope className="h-10 w-10 text-primary" />
             <span className="text-4xl font-headline font-black text-primary tracking-tighter">Sync</span>
           </div>
-          <h2 className="text-2xl font-bold">Portal da Equipe</h2>
-          <p className="text-muted-foreground">Acesse as ferramentas clínicas e administrativas.</p>
+          <h2 className="text-2xl font-bold">Acesso à Plataforma</h2>
+          <p className="text-muted-foreground text-sm">Faça login para entrar ou solicitar acesso à equipe.</p>
         </div>
 
         <Card className="shadow-2xl border-none rounded-[2rem] overflow-hidden">
           <CardHeader className="text-center pt-10">
-            <CardTitle>Entrar no Sistema</CardTitle>
-            <CardDescription>Utilize seu e-mail corporativo Google</CardDescription>
+            <CardTitle>Entrar</CardTitle>
+            <CardDescription>Utilize sua conta Google</CardDescription>
           </CardHeader>
           <CardContent className="p-10">
             <Button 
@@ -159,10 +138,10 @@ export default function AuthPage() {
               {isLoggingIn ? <Loader2 className="animate-spin h-6 w-6" /> : "Login com Google"}
             </Button>
             
-            <div className="mt-8 p-4 bg-amber-50 rounded-2xl border border-amber-100 flex gap-3 items-start">
-              <ShieldAlert className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-              <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
-                Se você faz parte da equipe e não consegue acessar, solicite ao administrador o pré-cadastro do seu e-mail no painel de gestão.
+            <div className="mt-8 p-4 bg-primary/5 rounded-2xl border border-primary/10 flex gap-3 items-start">
+              <CheckCircle2 className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+              <p className="text-[11px] text-muted-foreground leading-relaxed font-medium">
+                Todos os novos cadastros são direcionados para uma sala de espera. Fale com o administrador da clínica para liberar seu acesso às ferramentas.
               </p>
             </div>
           </CardContent>
