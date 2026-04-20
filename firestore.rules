@@ -9,8 +9,8 @@ service cloud.firestore {
 
     function isMasterAdmin() {
       return isSignedIn() && (
-        request.auth.token.email.lower() == 'luizhenrique8759@gmail.com' ||
-        request.auth.token.email.lower() == 'luiz88955548@gmail.com'
+        request.auth.token.get('email', '').lower() == 'luizhenrique8759@gmail.com' ||
+        request.auth.token.get('email', '').lower() == 'luiz88955548@gmail.com'
       );
     }
 
@@ -36,16 +36,14 @@ service cloud.firestore {
       
       allow get: if isSignedIn() && (
         request.auth.uid == userId || 
-        isStaff() || 
-        (resource != null && resource.data.email == request.auth.token.email)
+        isStaff()
       );
       
       allow create: if isSignedIn(); 
       
-      // Permitir que toda a equipe (isStaff) possa excluir pacientes
       allow delete: if isStaff();
       
-      allow update: if isMasterAdmin() || isAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
     }
 
     match /appointments/{apptId} {
@@ -61,7 +59,7 @@ service cloud.firestore {
 
     match /services/{id} { 
       allow read: if isSignedIn(); 
-      allow write: if isMasterAdmin() || isAdmin(); 
+      allow write: if isAdmin(); 
     }
   }
 }

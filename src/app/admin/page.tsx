@@ -212,7 +212,7 @@ export default function AdminDashboard() {
   };
 
   const handleDeletePatient = (patient: any) => {
-    if (!db || authorityLevel < 1) return;
+    if (!db || !isAuthorized) return;
     if (!confirm(`Tem certeza que deseja excluir permanentemente o cadastro de ${patient.name}? Esta ação não poderá ser desfeita.`)) return;
 
     const userRef = doc(db, 'users', patient.id);
