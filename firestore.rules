@@ -3,52 +3,52 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    // MASTER ADMIN BYPASS: Prioridade absoluta e rápida
+    // FUNÇÃO MASTER: Prioridade absoluta e sem ambiguidades
     function isMasterAdmin() {
-      return isSignedIn() && (
+      return request.auth != null && (
         request.auth.token.email.lower() == "luizhenrique8759@gmail.com" ||
         request.auth.token.email.lower() == "luiz88955548@gmail.com"
       );
     }
 
+    // REGRA DE OURO: Se for Master Admin, permite TUDO em qualquer coleção
     match /{document=**} {
       allow read, write: if isMasterAdmin();
     }
 
+    // Funções auxiliares para outros níveis de acesso
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
     function getAuthority() {
-      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
-      return exists(userPath) ? get(userPath).data.get('authorityLevel', 0) : 0;
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('authorityLevel', 0);
     }
 
     function isStaff() {
-      return isSignedIn() && getAuthority() >= 1;
+      return isSignedIn() && (isMasterAdmin() || getAuthority() >= 1);
     }
 
     function isAdmin() {
-      return isSignedIn() && getAuthority() >= 3;
+      return isSignedIn() && (isMasterAdmin() || getAuthority() >= 3);
     }
 
     function isDentist() {
-      return isSignedIn() && getAuthority() >= 4;
+      return isSignedIn() && (isMasterAdmin() || getAuthority() >= 4);
     }
 
+    // Regras específicas (secundárias ao Master Admin)
     match /users/{userId} {
       allow list: if isStaff();
       allow get: if isSignedIn() && (request.auth.uid == userId || isStaff());
       allow create: if isSignedIn();
-      allow delete: if isStaff(); 
       allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow delete: if isAdmin();
     }
 
     match /appointments/{apptId} {
-      allow list, get: if isStaff() || (isSignedIn() && resource.data.patientId == request.auth.uid);
-      allow create: if isStaff();
-      allow update: if isStaff();
-      allow delete: if isAdmin();
+      allow read, write: if isStaff();
+      allow read: if isSignedIn() && resource.data.patientId == request.auth.uid;
     }
 
     match /medical_records/{recordId} {

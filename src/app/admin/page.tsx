@@ -7,7 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LogOut, Loader2, ClipboardList, ShieldAlert, Trash2, Search, Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus, UserMinus, ShieldCheck, Clock, Activity, Check, X, CalendarDays, Plus, TrendingUp, CalendarPlus, Bell, DollarSign, UserPlus } from "lucide-react";
+import { 
+  LogOut, Loader2, ClipboardList, ShieldAlert, Trash2, Search, 
+  Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus, 
+  UserMinus, ShieldCheck, Clock, Activity, Check, X, 
+  CalendarDays, Plus, TrendingUp, CalendarPlus, Bell, DollarSign, UserPlus 
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { signOut } from 'firebase/auth';
@@ -238,23 +243,21 @@ export default function AdminDashboard() {
   };
 
   const handleRemoveAccess = (targetUser: any) => {
-    if (!db || (authorityLevel < 3 && !isMaster)) return;
+    if (!db || !isMaster) return;
     if (targetUser.id === user?.uid) {
       toast({ variant: "destructive", title: "Operação impossível", description: "Você não pode remover seu próprio acesso." });
       return;
     }
-    const targetEmail = targetUser.email?.toLowerCase().trim();
-    if (masterEmails.some(email => email.toLowerCase() === targetEmail) && !isMaster) {
-      toast({ variant: "destructive", title: "Restrição de Segurança", description: "Apenas o Master Admin pode remover outros administradores mestres." });
-      return;
-    }
-
-    if (!confirm(`Tem certeza que deseja excluir permanentemente o registro de ${targetUser.name}? Esta ação removerá o usuário do banco de dados.`)) return;
+    
+    if (!confirm(`Tem certeza que deseja EXCLUIR PERMANENTEMENTE o registro de ${targetUser.name}? Esta ação não pode ser desfeita.`)) return;
 
     const userRef = doc(db, 'users', targetUser.id);
     deleteDoc(userRef)
-      .then(() => toast({ title: "Usuário Removido", description: "O registro foi excluído permanentemente do sistema." }))
-      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: userRef.path, operation: 'delete' })));
+      .then(() => toast({ title: "Usuário Excluído", description: "O registro foi removido permanentemente do banco de dados." }))
+      .catch((err) => {
+        toast({ variant: "destructive", title: "Erro na exclusão", description: "Verifique as permissões de rede." });
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: userRef.path, operation: 'delete' }));
+      });
   };
 
   const handleDeletePatient = (patient: any) => {
@@ -1015,7 +1018,7 @@ export default function AdminDashboard() {
                 <TableBody>{filteredStaff?.map((u) => (
                   <TableRow key={u.id}><TableCell className="pl-6"><div className="font-bold">{u.name}</div><div className="text-[10px] opacity-60">{u.email}</div>{u.status === 'pending_login' && <Badge variant="outline" className="text-[8px] mt-1">Aguardando Login</Badge>}</TableCell><TableCell><Badge variant={u.authorityLevel > 0 ? "default" : "outline"} className="gap-1">{u.authorityLevel > 0 ? <ShieldCheck className="h-3 w-3" /> : <Clock className="h-3 w-3" />}{roleNames[u.authorityLevel || 0]}</Badge></TableCell><TableCell className="text-right pr-6">
                     <div className="flex items-center justify-end gap-2">
-                      <Select onValueChange={(val) => handleUpdateLevel(u, val)} value={String(u.authorityLevel || 0)} disabled={(authorityLevel < 3 && !isMaster) || (isMaster && masterEmails.some(email => email.toLowerCase() === u.email?.toLowerCase()) && u.id !== user?.uid)}>
+                      <Select onValueChange={(val) => handleUpdateLevel(u, val)} value={String(u.authorityLevel || 0)} disabled={(authorityLevel < 3 && !isMaster) || (isMaster && masterEmails.some(email => email.toLowerCase() === u.email?.toLowerCase()) && u.id === user?.uid)}>
                         <SelectTrigger className="w-[180px] h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>{roleNames.map((name, i) => <SelectItem key={i} value={String(i)}>{i === 0 ? "⚠️ Pendente" : name}</SelectItem>)}</SelectContent>
                       </Select>
@@ -1024,7 +1027,7 @@ export default function AdminDashboard() {
                         size="icon" 
                         className="h-8 w-8 text-destructive hover:bg-destructive/10" 
                         onClick={() => handleRemoveAccess(u)}
-                        disabled={(authorityLevel < 3 && !isMaster) || u.id === user?.uid || (masterEmails.some(email => email.toLowerCase() === u.email?.toLowerCase()) && !isMaster)}
+                        disabled={!isMaster || u.id === user?.uid}
                       >
                         <UserMinus className="h-4 w-4" />
                       </Button>
