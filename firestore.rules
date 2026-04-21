@@ -3,20 +3,21 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // FUNÇÃO MASTER: Prioridade absoluta e sem ambiguidades
+    // PRIORIDADE MÁXIMA: Master Admin (Acesso Irrestrito)
+    // Usando comparação direta para máxima performance e confiabilidade
     function isMasterAdmin() {
       return request.auth != null && (
-        request.auth.token.email.lower() == "luizhenrique8759@gmail.com" ||
-        request.auth.token.email.lower() == "luiz88955548@gmail.com"
+        request.auth.token.email == "luizhenrique8759@gmail.com" ||
+        request.auth.token.email == "luiz88955548@gmail.com"
       );
     }
 
-    // REGRA DE OURO: Se for Master Admin, permite TUDO em qualquer coleção
+    // Regra Global para Master Admin
     match /{document=**} {
       allow read, write: if isMasterAdmin();
     }
 
-    // Funções auxiliares para outros níveis de acesso
+    // Funções auxiliares para outros níveis (Backup para Staff/Outros)
     function isSignedIn() {
       return request.auth != null;
     }
@@ -33,11 +34,7 @@ service cloud.firestore {
       return isSignedIn() && (isMasterAdmin() || getAuthority() >= 3);
     }
 
-    function isDentist() {
-      return isSignedIn() && (isMasterAdmin() || getAuthority() >= 4);
-    }
-
-    // Regras específicas (secundárias ao Master Admin)
+    // Regras Específicas
     match /users/{userId} {
       allow list: if isStaff();
       allow get: if isSignedIn() && (request.auth.uid == userId || isStaff());
@@ -53,7 +50,7 @@ service cloud.firestore {
 
     match /medical_records/{recordId} {
       allow list, get, create: if isStaff();
-      allow update, delete: if isDentist();
+      allow update, delete: if isMasterAdmin() || getAuthority() >= 4;
     }
 
     match /services/{id} { 

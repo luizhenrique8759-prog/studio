@@ -29,6 +29,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { generateClinicalSummary } from '@/ai/flows/generate-clinical-summary';
 import { TIME_SLOTS } from '@/lib/mock-data';
+import { deleteDocumentNonBlocking, updateDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 
 export default function AdminDashboard() {
   const { toast } = useToast();
@@ -208,13 +209,10 @@ export default function AdminDashboard() {
       updatedAt: new Date().toISOString()
     };
 
-    setDoc(patientRef, patientData)
-      .then(() => {
-        toast({ title: "Paciente Cadastrado", description: `${name} foi adicionado ao sistema.` });
-        (e.target as HTMLFormElement).reset();
-      })
-      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: patientRef.path, operation: 'create', requestResourceData: patientData })))
-      .finally(() => setIsRegisteringPatient(false));
+    setDocumentNonBlocking(patientRef, patientData, {});
+    toast({ title: "Paciente Cadastrado", description: `${name} foi adicionado ao sistema.` });
+    (e.target as HTMLFormElement).reset();
+    setIsRegisteringPatient(false);
   };
 
   const handleUpdateLevel = (targetUser: any, levelStr: string) => {
@@ -231,15 +229,8 @@ export default function AdminDashboard() {
       updatedAt: new Date().toISOString()
     };
 
-    updateDoc(userRef, updateData)
-      .then(() => toast({ title: "Acesso Atualizado", description: `${targetUser.name} agora é ${roleNames[level]}.` }))
-      .catch((err) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: userRef.path,
-          operation: 'update',
-          requestResourceData: updateData
-        }));
-      });
+    updateDocumentNonBlocking(userRef, updateData);
+    toast({ title: "Acesso Atualizado", description: `${targetUser.name} agora é ${roleNames[level]}.` });
   };
 
   const handleRemoveAccess = (targetUser: any) => {
@@ -252,12 +243,8 @@ export default function AdminDashboard() {
     if (!confirm(`Tem certeza que deseja EXCLUIR PERMANENTEMENTE o registro de ${targetUser.name}? Esta ação não pode ser desfeita.`)) return;
 
     const userRef = doc(db, 'users', targetUser.id);
-    deleteDoc(userRef)
-      .then(() => toast({ title: "Usuário Excluído", description: "O registro foi removido permanentemente do banco de dados." }))
-      .catch((err) => {
-        toast({ variant: "destructive", title: "Erro na exclusão", description: "Verifique as permissões de rede." });
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: userRef.path, operation: 'delete' }));
-      });
+    deleteDocumentNonBlocking(userRef);
+    toast({ title: "Usuário Excluído", description: "O registro foi removido permanentemente do banco de dados." });
   };
 
   const handleDeletePatient = (patient: any) => {
@@ -265,59 +252,47 @@ export default function AdminDashboard() {
     if (!confirm(`Tem certeza que deseja excluir permanentemente o cadastro de ${patient.name}? Esta ação não poderá ser desfeita.`)) return;
 
     const userRef = doc(db, 'users', patient.id);
-    deleteDoc(userRef)
-      .then(() => toast({ title: "Cadastro Excluído", description: "O paciente foi removido do sistema." }))
-      .catch((err) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ 
-          path: userRef.path, 
-          operation: 'delete' 
-        }));
-      });
+    deleteDocumentNonBlocking(userRef);
+    toast({ title: "Cadastro Excluído", description: "O paciente foi removido do sistema." });
   };
 
   const handleUpdateAppointmentStatus = (apptId: string, newStatus: string) => {
     if (!db) return;
     const apptRef = doc(db, 'appointments', apptId);
-    updateDoc(apptRef, { status: newStatus, updatedAt: new Date().toISOString() })
-      .then(() => toast({ title: "Status Atualizado" }))
-      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: apptRef.path, operation: 'update' })));
+    updateDocumentNonBlocking(apptRef, { status: newStatus, updatedAt: new Date().toISOString() });
+    toast({ title: "Status Atualizado" });
   };
 
   const handleUpdatePaymentStatus = (apptId: string, paid: boolean) => {
     if (!db) return;
     const apptRef = doc(db, 'appointments', apptId);
-    updateDoc(apptRef, { 
+    updateDocumentNonBlocking(apptRef, { 
       paymentStatus: paid ? 'paid' : 'unpaid', 
       updatedAt: new Date().toISOString() 
-    })
-      .then(() => toast({ title: paid ? "Pagamento Confirmado" : "Pagamento Estornado" }))
-      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: apptRef.path, operation: 'update' })));
+    });
+    toast({ title: paid ? "Pagamento Confirmado" : "Pagamento Estornado" });
   };
 
   const handleDeleteAppointment = (apptId: string) => {
     if (!db || !isAuthorized) return;
     if (!confirm("Tem certeza que deseja excluir permanentemente esta consulta cancelada?")) return;
     const apptRef = doc(db, 'appointments', apptId);
-    deleteDoc(apptRef)
-      .then(() => toast({ title: "Consulta Removida" }))
-      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: apptRef.path, operation: 'delete' })));
+    deleteDocumentNonBlocking(apptRef);
+    toast({ title: "Consulta Removida" });
   };
 
   const handleReschedule = (e: React.FormEvent) => {
     e.preventDefault();
     if (!db || !reschedulingAppt || !newRescheduleDate || !newRescheduleTime) return;
     const apptRef = doc(db, 'appointments', reschedulingAppt.id);
-    updateDoc(apptRef, { 
+    updateDocumentNonBlocking(apptRef, { 
       date: newRescheduleDate, 
       time: newRescheduleTime, 
       status: 'pending',
       updatedAt: new Date().toISOString() 
-    })
-      .then(() => {
-        toast({ title: "Consulta Reagendada" });
-        setReschedulingAppt(null);
-      })
-      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: apptRef.path, operation: 'update' })));
+    });
+    toast({ title: "Consulta Reagendada" });
+    setReschedulingAppt(null);
   };
 
   const handleRegisterStaff = (e: React.FormEvent<HTMLFormElement>) => {
@@ -338,13 +313,10 @@ export default function AdminDashboard() {
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
     };
 
-    setDoc(staffRef, staffData)
-      .then(() => {
-        toast({ title: "Colaborador Convidado", description: `Aguardando primeiro login de ${email}.` });
-        (e.target as HTMLFormElement).reset();
-      })
-      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: staffRef.path, operation: 'create', requestResourceData: staffData })))
-      .finally(() => setIsRegisteringStaff(false));
+    setDocumentNonBlocking(staffRef, staffData, {});
+    toast({ title: "Colaborador Convidado", description: `Aguardando primeiro login de ${email}.` });
+    (e.target as HTMLFormElement).reset();
+    setIsRegisteringStaff(false);
   };
 
   const handleSaveService = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -362,13 +334,11 @@ export default function AdminDashboard() {
 
     try {
       if (isManagingService?.id) {
-        await updateDoc(doc(db, 'services', isManagingService.id), serviceData);
+        updateDocumentNonBlocking(doc(db, 'services', isManagingService.id), serviceData);
         toast({ title: "Serviço Atualizado" });
       } else {
-        await addDoc(collection(db, 'services'), {
-          ...serviceData,
-          createdAt: new Date().toISOString(),
-        });
+        const serviceRef = doc(collection(db, 'services'));
+        setDocumentNonBlocking(serviceRef, { ...serviceData, createdAt: new Date().toISOString() }, {});
         toast({ title: "Serviço Criado" });
       }
       setIsManagingService(null);
@@ -379,14 +349,10 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteService = async (id: string) => {
+  const handleDeleteService = (id: string) => {
     if (!db || !confirm("Deseja realmente excluir este procedimento?")) return;
-    try {
-      await deleteDoc(doc(db, 'services', id));
-      toast({ title: "Serviço Removido" });
-    } catch (err) {
-      toast({ variant: "destructive", title: "Erro ao remover serviço" });
-    }
+    deleteDocumentNonBlocking(doc(db, 'services', id));
+    toast({ title: "Serviço Removido" });
   };
 
   const handleSaveMedicalRecord = (e: React.FormEvent) => {
@@ -406,14 +372,11 @@ export default function AdminDashboard() {
       createdAt: new Date().toISOString()
     };
 
-    setDoc(recordRef, recordData)
-      .then(() => {
-        toast({ title: "Prontuário Salvo" });
-        setClinicalNotes(""); 
-        setAiResult(null);
-        setRecordPhotos([]);
-      })
-      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: recordRef.path, operation: 'create', requestResourceData: recordData })));
+    setDocumentNonBlocking(recordRef, recordData, {});
+    toast({ title: "Prontuário Salvo" });
+    setClinicalNotes(""); 
+    setAiResult(null);
+    setRecordPhotos([]);
   };
 
   const handleGenerateAISummary = async () => {
