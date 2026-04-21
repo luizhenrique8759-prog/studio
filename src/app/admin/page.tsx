@@ -116,8 +116,12 @@ export default function AdminDashboard() {
   }, [db, isAuthorized]);
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
 
-  const patients = useMemo(() => allUsers?.filter(u => u.role === 'patient' || (!u.role && !u.authorityLevel)) || [], [allUsers]);
-  const staffMembers = useMemo(() => allUsers?.filter(u => (u.authorityLevel && u.authorityLevel > 0) || (u.role && u.role !== 'patient')) || [], [allUsers]);
+  // Filtro de Pacientes: Pessoas com authorityLevel 0
+  const patients = useMemo(() => allUsers?.filter(u => !u.authorityLevel || u.authorityLevel === 0) || [], [allUsers]);
+  
+  // Filtro de Equipe: No gerenciamento, mostramos TODOS para permitir promoção de cargo,
+  // exceto o próprio usuário logado se for para evitar auto-edição (opcional).
+  const staffMembers = useMemo(() => allUsers || [], [allUsers]);
 
   const filteredPatients = useMemo(() => patients.filter(p => 
     p.name?.toLowerCase().includes(patientSearch.toLowerCase()) || 
@@ -222,7 +226,7 @@ export default function AdminDashboard() {
     const updateData = { 
       role,
       authorityLevel: level,
-      status: level > 0 ? 'active' : 'pending',
+      status: 'active',
       updatedAt: new Date().toISOString()
     };
 
@@ -442,7 +446,7 @@ export default function AdminDashboard() {
     setRecordPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
-  const roleNames = useMemo(() => ["Pendente/Paciente", "Recepção", "Auxiliar", "Administrativo", "Dentista"], []);
+  const roleNames = useMemo(() => ["Aguardando Liberação / Paciente", "Recepção", "Auxiliar", "Administrativo", "Dentista"], []);
 
   if (isUserLoading || isLoadingUserDoc) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!user || !isAuthorized) return <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center space-y-4"><ShieldAlert className="h-16 w-16 text-destructive" /><h1 className="text-2xl font-bold">Acesso Restrito</h1><Button onClick={handleLogout}>Sair</Button></div>;
@@ -1009,7 +1013,7 @@ export default function AdminDashboard() {
         <TabsContent value="management">
            <div className="space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div className="relative w-full max-w-xs"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Buscar na equipe..." className="pl-10 h-10 rounded-xl" value={staffSearch} onChange={(e) => setStaffSearch(e.target.value)} /></div>
+              <div className="relative w-full max-w-xs"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Buscar por nome ou e-mail..." className="pl-10 h-10 rounded-xl" value={staffSearch} onChange={(e) => setStaffSearch(e.target.value)} /></div>
               <Dialog><DialogTrigger asChild><Button className="rounded-full gap-2"><MailPlus className="h-4 w-4" /> Convidar Colaborador</Button></DialogTrigger>
                 <DialogContent className="sm:max-w-[425px] rounded-[2rem]"><DialogHeader><DialogTitle>Novo Membro</DialogTitle></DialogHeader>
                   <form onSubmit={handleRegisterStaff} className="space-y-4 py-4">
