@@ -1,18 +1,23 @@
 
 "use client";
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
-import { Star, Stethoscope, Loader2, ArrowRight, ShieldCheck } from "lucide-react";
+import { Star, Stethoscope, Loader2, ArrowRight } from "lucide-react";
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
+import { PlaceHolderImages } from '@/lib/placeholder-images';
 
 export default function LandingPage() {
   const router = useRouter();
   const { user, isUserLoading } = useUser();
   const db = useFirestore();
+
+  const heroImage = useMemo(() => 
+    PlaceHolderImages.find(img => img.id === 'hero-landing') || PlaceHolderImages[0], 
+  []);
 
   const userDocRef = useMemoFirebase(() => {
     if (!user || !db) return null;
@@ -89,12 +94,12 @@ export default function LandingPage() {
                 </div>
               </div>
               <div className="relative">
-                <div className="aspect-square rounded-[3rem] overflow-hidden shadow-2xl border-8 border-white">
+                <div className="aspect-video lg:aspect-square rounded-[3rem] overflow-hidden shadow-2xl border-8 border-white bg-slate-200">
                   <img
-                    src="https://picsum.photos/seed/dental/800/800"
-                    alt="Dental Office"
+                    src={heroImage.imageUrl}
+                    alt={heroImage.description}
                     className="object-cover w-full h-full"
-                    data-ai-hint="modern clinic"
+                    data-ai-hint={heroImage.imageHint}
                   />
                 </div>
               </div>
