@@ -11,18 +11,19 @@ import {
   LogOut, Loader2, ClipboardList, ShieldAlert, Trash2, Search, 
   Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus, 
   UserMinus, ShieldCheck, Clock, Activity, Check, X, 
-  CalendarDays, Plus, TrendingUp, CalendarPlus, Bell, DollarSign, UserPlus 
+  CalendarDays, Plus, TrendingUp, CalendarPlus, Bell, DollarSign, UserPlus,
+  Image as ImageIcon
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { collection, doc, updateDoc, query, orderBy, where, deleteDoc, setDoc, limit, addDoc } from 'firebase/firestore';
+import { collection, doc, query, orderBy, where, limit } from 'firebase/firestore';
 import Link from 'next/link';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -194,6 +195,7 @@ export default function AdminDashboard() {
     const email = (formData.get('email') as string).toLowerCase().trim();
     const birthDate = formData.get('birthDate') as string;
     const phoneNumber = formData.get('phoneNumber') as string;
+    const photoURL = formData.get('photoURL') as string;
 
     const patientRef = doc(collection(db, 'users'));
     const patientData = {
@@ -202,6 +204,7 @@ export default function AdminDashboard() {
       email: email || null,
       birthDate,
       phoneNumber,
+      photoURL: photoURL || null,
       role: 'patient',
       authorityLevel: 0,
       status: 'active',
@@ -303,10 +306,12 @@ export default function AdminDashboard() {
     const name = formData.get('name') as string;
     const email = (formData.get('email') as string).toLowerCase().trim();
     const level = parseInt(formData.get('level') as string);
+    const photoURL = formData.get('photoURL') as string;
 
     const staffRef = doc(collection(db, 'users'));
     const staffData = {
       name, email, 
+      photoURL: photoURL || null,
       role: level === 1 ? 'reception' : level === 4 ? 'dentist' : 'admin',
       authorityLevel: level,
       status: 'pending_login',
@@ -566,6 +571,10 @@ export default function AdminDashboard() {
                       <Label>E-mail (Opcional)</Label>
                       <Input name="email" type="email" placeholder="email@exemplo.com" />
                     </div>
+                    <div className="space-y-2">
+                      <Label>URL da Foto (Opcional)</Label>
+                      <Input name="photoURL" placeholder="https://..." />
+                    </div>
                     <Button type="submit" disabled={isRegisteringPatient} className="w-full rounded-xl">
                       {isRegisteringPatient ? <Loader2 className="animate-spin" /> : "Salvar Cadastro"}
                     </Button>
@@ -577,7 +586,8 @@ export default function AdminDashboard() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="pl-6">Nome</TableHead>
+                    <TableHead className="w-16 pl-6">Foto</TableHead>
+                    <TableHead>Nome</TableHead>
                     <TableHead>Idade</TableHead>
                     <TableHead>Contato</TableHead>
                     <TableHead className="text-right pr-6">Ações</TableHead>
@@ -586,11 +596,25 @@ export default function AdminDashboard() {
                 <TableBody>
                   {filteredPatients?.map((p) => (
                     <TableRow key={p.id}>
-                      <TableCell className="font-bold pl-6">{p.name}</TableCell>
+                      <TableCell className="pl-6">
+                        <Avatar className="h-10 w-10 border border-muted">
+                          <AvatarImage src={p.photoURL} alt={p.name} />
+                          <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
+                            {p.name?.substring(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                      </TableCell>
+                      <TableCell className="font-bold">{p.name}</TableCell>
                       <TableCell>{calculateAge(p.birthDate) || '-'} anos</TableCell>
                       <TableCell className="text-xs">{p.email || p.phoneNumber || 'N/A'}</TableCell>
                       <TableCell className="text-right pr-6">
                         <div className="flex justify-end gap-2">
+                          <Button variant="outline" size="icon" title="Ver Prontuário" className="h-8 w-8 text-primary" onClick={() => {
+                            setSelectedPatientId(p.id);
+                            // Scroll a bit or just switch tab manually? The UI doesn't auto-switch but selects.
+                          }}>
+                            <UserCheck className="h-4 w-4" />
+                          </Button>
                           <Button variant="outline" size="icon" className="h-8 w-8 text-destructive border-destructive/20" onClick={() => handleDeletePatient(p)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -626,11 +650,15 @@ export default function AdminDashboard() {
                       <Button 
                         key={p.id} 
                         variant={selectedPatientId === p.id ? "default" : "outline"} 
-                        className="w-full justify-start text-left h-auto py-3 px-4 rounded-xl" 
+                        className="w-full justify-start text-left h-auto py-3 px-4 rounded-xl gap-3" 
                         onClick={() => setSelectedPatientId(p.id)}
                       >
-                        <div className="flex flex-col">
-                          <span className="font-bold">{p.name}</span>
+                        <Avatar className="h-8 w-8 shrink-0">
+                          <AvatarImage src={p.photoURL} />
+                          <AvatarFallback className="text-[10px]">{p.name?.substring(0,2).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col overflow-hidden">
+                          <span className="font-bold truncate">{p.name}</span>
                           <span className="text-[10px] opacity-70">{calculateAge(p.birthDate) ?? '?'} anos</span>
                         </div>
                       </Button>
@@ -646,9 +674,12 @@ export default function AdminDashboard() {
                   <Card className="rounded-3xl border-none shadow-sm bg-primary/5">
                     <CardContent className="p-6 flex flex-wrap gap-4 items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 rounded-full bg-primary flex items-center justify-center text-white font-bold text-xl">
-                          {selectedPatient.name[0]}
-                        </div>
+                        <Avatar className="h-16 w-16 border-4 border-white shadow-md">
+                          <AvatarImage src={selectedPatient.photoURL} />
+                          <AvatarFallback className="bg-primary text-white font-bold text-2xl">
+                            {selectedPatient.name[0]}
+                          </AvatarFallback>
+                        </Avatar>
                         <div>
                           <h2 className="text-xl font-black text-primary">{selectedPatient.name}</h2>
                           <div className="flex gap-3 text-xs opacity-70">
@@ -970,16 +1001,35 @@ export default function AdminDashboard() {
               <Dialog><DialogTrigger asChild><Button className="rounded-full gap-2"><MailPlus className="h-4 w-4" /> Convidar Colaborador</Button></DialogTrigger>
                 <DialogContent className="sm:max-w-[425px] rounded-[2rem]"><DialogHeader><DialogTitle>Novo Membro</DialogTitle></DialogHeader>
                   <form onSubmit={handleRegisterStaff} className="space-y-4 py-4">
-                    <Input name="name" placeholder="Nome" required /><Input name="email" type="email" placeholder="E-mail" required />
+                    <Input name="name" placeholder="Nome" required />
+                    <Input name="email" type="email" placeholder="E-mail" required />
+                    <Input name="photoURL" placeholder="URL da Foto (Opcional)" />
                     <Select name="level" defaultValue="1"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1">Recepção</SelectItem><SelectItem value="2">Auxiliar</SelectItem><SelectItem value="3">Admin</SelectItem><SelectItem value="4">Dentista</SelectItem></SelectContent></Select>
                     <Button type="submit" disabled={isRegisteringStaff} className="w-full">{isRegisteringStaff ? <Loader2 className="animate-spin" /> : "Convidar"}</Button>
                   </form>
                 </DialogContent></Dialog>
             </div>
             <Card className="border-none shadow-xl rounded-3xl overflow-hidden"><CardContent className="p-0">
-              <Table><TableHeader><TableRow><TableHead className="pl-6">Nome / E-mail</TableHead><TableHead>Cargo Atual</TableHead><TableHead className="text-right pr-6">Ações</TableHead></TableRow></TableHeader>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-16 pl-6">Foto</TableHead>
+                    <TableHead>Nome / E-mail</TableHead>
+                    <TableHead>Cargo Atual</TableHead>
+                    <TableHead className="text-right pr-6">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>{filteredStaff?.map((u) => (
-                  <TableRow key={u.id}><TableCell className="pl-6"><div className="font-bold">{u.name}</div><div className="text-[10px] opacity-60">{u.email}</div>{u.status === 'pending_login' && <Badge variant="outline" className="text-[8px] mt-1">Aguardando Login</Badge>}</TableCell><TableCell><Badge variant={u.authorityLevel > 0 ? "default" : "outline"} className="gap-1">{u.authorityLevel > 0 ? <ShieldCheck className="h-3 w-3" /> : <Clock className="h-3 w-3" />}{roleNames[u.authorityLevel || 0]}</Badge></TableCell><TableCell className="text-right pr-6">
+                  <TableRow key={u.id}>
+                    <TableCell className="pl-6">
+                      <Avatar className="h-10 w-10 border border-muted">
+                        <AvatarImage src={u.photoURL} alt={u.name} />
+                        <AvatarFallback className="bg-primary/5 text-primary text-xs font-bold">
+                          {u.name?.substring(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                    </TableCell>
+                    <TableCell><div className="font-bold">{u.name}</div><div className="text-[10px] opacity-60">{u.email}</div>{u.status === 'pending_login' && <Badge variant="outline" className="text-[8px] mt-1">Aguardando Login</Badge>}</TableCell><TableCell><Badge variant={u.authorityLevel > 0 ? "default" : "outline"} className="gap-1">{u.authorityLevel > 0 ? <ShieldCheck className="h-3 w-3" /> : <Clock className="h-3 w-3" />}{roleNames[u.authorityLevel || 0]}</Badge></TableCell><TableCell className="text-right pr-6">
                     <div className="flex items-center justify-end gap-2">
                       <Select onValueChange={(val) => handleUpdateLevel(u, val)} value={String(u.authorityLevel || 0)} disabled={(authorityLevel < 3 && !isMaster) || (isMaster && masterEmails.some(email => email.toLowerCase() === u.email?.toLowerCase()) && u.id === user?.uid)}>
                         <SelectTrigger className="w-[180px] h-8 text-xs"><SelectValue /></SelectTrigger>
