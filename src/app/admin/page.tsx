@@ -116,11 +116,7 @@ export default function AdminDashboard() {
   }, [db, isAuthorized]);
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
 
-  // Filtro de Pacientes: Pessoas com authorityLevel 0
   const patients = useMemo(() => allUsers?.filter(u => !u.authorityLevel || u.authorityLevel === 0) || [], [allUsers]);
-  
-  // Filtro de Equipe: No gerenciamento, mostramos TODOS para permitir promoção de cargo,
-  // exceto o próprio usuário logado se for para evitar auto-edição (opcional).
   const staffMembers = useMemo(() => allUsers || [], [allUsers]);
 
   const filteredPatients = useMemo(() => patients.filter(p => 
@@ -253,21 +249,12 @@ export default function AdminDashboard() {
       return;
     }
 
+    if (!confirm(`Tem certeza que deseja excluir permanentemente o registro de ${targetUser.name}? Esta ação removerá o usuário do banco de dados.`)) return;
+
     const userRef = doc(db, 'users', targetUser.id);
-    if (targetUser.status === 'pending_login') {
-      deleteDoc(userRef)
-        .then(() => toast({ title: "Convite Removido" }))
-        .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: userRef.path, operation: 'delete' })));
-    } else {
-      const updateData = {
-        role: 'patient',
-        authorityLevel: 0,
-        updatedAt: new Date().toISOString()
-      };
-      updateDoc(userRef, updateData)
-        .then(() => toast({ title: "Acesso Revogado" }))
-        .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: userRef.path, operation: 'update', requestResourceData: updateData })));
-    }
+    deleteDoc(userRef)
+      .then(() => toast({ title: "Usuário Removido", description: "O registro foi excluído permanentemente do sistema." }))
+      .catch((err) => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: userRef.path, operation: 'delete' })));
   };
 
   const handleDeletePatient = (patient: any) => {
