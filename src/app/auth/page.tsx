@@ -33,11 +33,12 @@ export default function AuthPage() {
       const userRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userRef);
       
-      const isMaster = MASTER_ADMIN_EMAILS.includes(userEmail);
+      const isMaster = MASTER_ADMIN_EMAILS.some(email => email.toLowerCase() === userEmail);
       let finalLevel = 0;
 
       if (!userSnap.exists()) {
         // Verifica se há um convite pendente por e-mail
+        // Agora as regras permitem que qualquer logado faça essa consulta
         const q = query(collection(db, 'users'), where('email', '==', userEmail), limit(1));
         const emailSnap = await getDocs(q);
         
@@ -46,6 +47,7 @@ export default function AuthPage() {
           const pendingData = pendingDoc.data();
           finalLevel = pendingData.authorityLevel || 0;
           
+          // Cria o documento oficial com o UID do Firebase
           await setDoc(userRef, {
             ...pendingData,
             id: user.uid,
@@ -55,8 +57,11 @@ export default function AuthPage() {
             updatedAt: new Date().toISOString()
           });
           
+          // Remove o convite antigo que usava ID aleatório
           if (pendingDoc.id !== user.uid) {
-            try { await deleteDoc(doc(db, 'users', pendingDoc.id)); } catch (e) {}
+            try { await deleteDoc(doc(db, 'users', pendingDoc.id)); } catch (e) {
+              console.warn("Could not delete invitation doc, it might not be necessary.", e);
+            }
           }
         } else {
           // Novo usuário padrão sem convite

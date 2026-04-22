@@ -4,14 +4,15 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // PRIORIDADE ABSOLUTA: Master Admin (Acesso Total)
+    // Usamos uma lista direta para evitar falhas de regex em tokens específicos
     function isMasterAdmin() {
       return request.auth != null && (
-        request.auth.token.email.matches('(?i)luizhenrique8759@gmail\\.com') ||
-        request.auth.token.email.matches('(?i)luiz88955548@gmail\\.com')
+        request.auth.token.email == 'luizhenrique8759@gmail.com' ||
+        request.auth.token.email == 'luiz88955548@gmail.com'
       );
     }
 
-    // Regra Global de Bypass para Master Admins - ISSO RESOLVE ERROS DE PERMISSÃO PARA VOCÊ
+    // Regra Global de Bypass para Master Admins
     match /{document=**} {
       allow read, write: if isMasterAdmin();
     }
@@ -22,7 +23,8 @@ service cloud.firestore {
     }
 
     function getAuthority() {
-      // Tenta obter o nível de autoridade do documento do usuário
+      // Tenta obter o nível de autoridade do documento do usuário atual
+      // Se o documento não existir, retorna 0 (acesso básico/paciente)
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('authorityLevel', 0);
     }
 
@@ -44,11 +46,13 @@ service cloud.firestore {
 
     // Regras Específicas por Coleção
     match /users/{userId} {
-      allow list: if isStaff();
-      allow get: if isSignedIn() && (request.auth.uid == userId || isStaff());
+      // ESSENCIAL: Permitir listagem para encontrar convites pendentes por e-mail no login
+      allow list: if isSignedIn();
+      allow get: if isSignedIn();
       allow create: if isSignedIn();
       allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
-      allow delete: if isMasterAdmin();
+      // Usuários podem deletar seus próprios registros (ex: limpar convite após login) ou Admin
+      allow delete: if isMasterAdmin() || (isSignedIn() && (request.auth.uid == userId || resource.data.email == request.auth.token.email));
     }
 
     match /appointments/{apptId} {
