@@ -3,26 +3,27 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // PRIORIDADE MÁXIMA: Master Admin (Acesso Irrestrito)
-    // Usando comparação direta para máxima performance e confiabilidade
+    // PRIORIDADE ABSOLUTA: Master Admin (Acesso Total)
+    // Usando matches para ignorar case sensitivity e garantir que o admin sempre tenha acesso.
     function isMasterAdmin() {
       return request.auth != null && (
-        request.auth.token.email == "luizhenrique8759@gmail.com" ||
-        request.auth.token.email == "luiz88955548@gmail.com"
+        request.auth.token.email.matches('(?i)luizhenrique8759@gmail\\.com') ||
+        request.auth.token.email.matches('(?i)luiz88955548@gmail\\.com')
       );
     }
 
-    // Regra Global para Master Admin
+    // Regra Global de Bypass para Master Admins
     match /{document=**} {
       allow read, write: if isMasterAdmin();
     }
 
-    // Funções auxiliares para outros níveis (Backup para Staff/Outros)
+    // Funções auxiliares para outros níveis de acesso
     function isSignedIn() {
       return request.auth != null;
     }
 
     function getAuthority() {
+      // Tenta obter o nível de autoridade do documento do usuário
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('authorityLevel', 0);
     }
 
@@ -30,27 +31,36 @@ service cloud.firestore {
       return isSignedIn() && (isMasterAdmin() || getAuthority() >= 1);
     }
 
+    function isAssistant() {
+      return isSignedIn() && (isMasterAdmin() || getAuthority() >= 2);
+    }
+
     function isAdmin() {
       return isSignedIn() && (isMasterAdmin() || getAuthority() >= 3);
     }
 
-    // Regras Específicas
+    function isDentist() {
+      return isSignedIn() && (isMasterAdmin() || getAuthority() >= 4);
+    }
+
+    // Regras Específicas por Coleção (Backups do Bypass Global)
     match /users/{userId} {
       allow list: if isStaff();
       allow get: if isSignedIn() && (request.auth.uid == userId || isStaff());
       allow create: if isSignedIn();
       allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
-      allow delete: if isAdmin();
+      allow delete: if isMasterAdmin();
     }
 
     match /appointments/{apptId} {
-      allow read, write: if isStaff();
-      allow read: if isSignedIn() && resource.data.patientId == request.auth.uid;
+      allow read: if isStaff() || (isSignedIn() && resource.data.patientId == request.auth.uid);
+      allow write: if isStaff();
     }
 
     match /medical_records/{recordId} {
-      allow list, get, create: if isStaff();
-      allow update, delete: if isMasterAdmin() || getAuthority() >= 4;
+      allow read: if isStaff();
+      allow create: if isAssistant() || isDentist();
+      allow update, delete: if isDentist() || isMasterAdmin();
     }
 
     match /services/{id} { 

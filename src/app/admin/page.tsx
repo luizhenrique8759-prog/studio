@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -11,8 +11,7 @@ import {
   LogOut, Loader2, ClipboardList, ShieldAlert, Trash2, Search, 
   Sparkles, UserCheck, Edit2, Save, Lock, Calendar, MailPlus, 
   UserMinus, ShieldCheck, Clock, Activity, Check, X, 
-  CalendarDays, Plus, TrendingUp, CalendarPlus, Bell, DollarSign, UserPlus,
-  Image as ImageIcon
+  CalendarDays, Plus, TrendingUp, CalendarPlus, Bell, DollarSign, UserPlus
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useUser, useCollection, useFirestore, useMemoFirebase, useDoc, errorEmitter } from '@/firebase';
@@ -611,7 +610,6 @@ export default function AdminDashboard() {
                         <div className="flex justify-end gap-2">
                           <Button variant="outline" size="icon" title="Ver Prontuário" className="h-8 w-8 text-primary" onClick={() => {
                             setSelectedPatientId(p.id);
-                            // Scroll a bit or just switch tab manually? The UI doesn't auto-switch but selects.
                           }}>
                             <UserCheck className="h-4 w-4" />
                           </Button>
