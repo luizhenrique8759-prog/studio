@@ -28,6 +28,7 @@ export default function WelcomeWaitingPage() {
       return;
     }
     
+    // Se o usuário já tiver nível de autoridade, redireciona para o admin
     if (!isUserLoading && !isLoadingUser && userData && userData.authorityLevel >= 1) {
       router.push('/admin');
     }
@@ -57,7 +58,10 @@ export default function WelcomeWaitingPage() {
         <div className="p-4 bg-muted/30 rounded-2xl text-left space-y-2">
           <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Informações da Conta</p>
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-slate-200" />
+            <Avatar className="h-10 w-10">
+              <AvatarImage src={user?.photoURL || undefined} />
+              <AvatarFallback>{user?.displayName?.substring(0,2).toUpperCase()}</AvatarFallback>
+            </Avatar>
             <div className="flex-1">
               <p className="text-xs font-bold truncate">{user?.displayName}</p>
               <p className="text-[10px] text-muted-foreground">{user?.email}</p>
@@ -77,3 +81,5 @@ export default function WelcomeWaitingPage() {
     </div>
   );
 }
+
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";

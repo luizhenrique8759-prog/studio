@@ -122,7 +122,7 @@ export default function AdminDashboard() {
   }, [db, isAuthorized]);
   const { data: allUsers, isLoading: isLoadingUsers } = useCollection(usersRef);
 
-  const patients = useMemo(() => allUsers?.filter(u => !u.authorityLevel || u.authorityLevel === 0) || [], [allUsers]);
+  const patients = useMemo(() => allUsers?.filter(u => u.authorityLevel === 0 && u.role === 'patient') || [], [allUsers]);
   const staffMembers = useMemo(() => allUsers || [], [allUsers]);
 
   const filteredPatients = useMemo(() => patients.filter(p => 
